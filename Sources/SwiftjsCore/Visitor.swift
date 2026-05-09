@@ -19,7 +19,7 @@ class Visitor: SyntaxVisitor {
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
         let name = node.name.text
         
-        // 🆕 FIX: Handle "Page" as Default Export for Next.js
+        // FIX: Handle "Page" as Default Export for Next.js
         if name == "Page" {
             transpiler.output += "export default function Page() {\n"
         } else {
@@ -42,13 +42,13 @@ class Visitor: SyntaxVisitor {
         
         // Debug: Uncomment this to see what attributes the visitor is actually seeing
         // print("Checking var: \(node.bindings.first?.pattern.description ?? "?") - Attrs: \(node.attributes.description)")
-
+        
         // A. Handle @State
         // We check if ANY attribute's description contains "State" (handles @State, @SwiftUI.State, etc)
         let hasState = node.attributes.contains { attr in
             attr.as(AttributeSyntax.self)?.attributeName.description.trimmingCharacters(in: .whitespaces) == "State"
         }
-
+        
         if hasState {
             transpiler.isClientComponent = true
             
@@ -87,7 +87,7 @@ class Visitor: SyntaxVisitor {
         }
     }
     
-    // MARK: - 3. Handle Function Calls (Existing Logic)
+    // MARK: - 3. Handle Function Calls
     override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
         guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text ??
                 node.calledExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text
@@ -95,47 +95,34 @@ class Visitor: SyntaxVisitor {
             return .visitChildren
         }
         
-        // Modifiers (.padding)
+        // CASE A: Modifier (lowercase)
         if name.first?.isLowercase == true {
             if let (baseView, modifiers) = unwindModifierChain(node: node) {
+                // Track usage
+                if let baseName = baseView.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text {
+                    transpiler.usedComponents.insert(baseName)
+                }
                 processView(node: baseView, modifiers: modifiers)
-                
-                // Manually walk children (e.g. content of VStack)
-                // Note: We need to traverse the arguments/closure of the base view
-                if let trailingClosure = baseView.trailingClosure {
-                    self.walk(trailingClosure)
-                }
-                
-                if let baseName = baseView.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
-                   baseView.trailingClosure != nil {
-                    transpiler.output += "</\(baseName)>\n"
-                }
                 return .skipChildren
             }
         }
         
-        // CASE B: Base View (VStack, Text)
+        // CASE B: Base View (Uppercase)
         if name.first?.isUppercase == true {
-            
-            // 🆕 FIX: Track the component usage!
             transpiler.usedComponents.insert(name)
-            
             processView(node: node, modifiers: [])
-            if node.trailingClosure != nil {
-                return .visitChildren
-            }
             return .skipChildren
         }
         
         return .visitChildren
     }
     
-    override func visitPost(_ node: FunctionCallExprSyntax) {
-        guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text else { return }
-        if name.first?.isUppercase == true && node.trailingClosure != nil {
-            transpiler.output += "</\(name)>\n"
-        }
-    }
+    //    override func visitPost(_ node: FunctionCallExprSyntax) {
+    //        guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text else { return }
+    //        if name.first?.isUppercase == true && node.trailingClosure != nil {
+    //            transpiler.output += "</\(name)>\n"
+    //        }
+    //    }
     
     override func visit(_ node: StringLiteralExprSyntax) -> SyntaxVisitorContinueKind {
         for segment in node.segments {
@@ -167,14 +154,15 @@ class Visitor: SyntaxVisitor {
     private func processView(node: FunctionCallExprSyntax, modifiers: [FunctionCallExprSyntax]) {
         guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text else { return }
         
+        // 1. Process Modifiers (Styles)
         var styles: [String] = []
         var extraProps: [String] = []
         
         for mod in modifiers {
             if let modName = mod.calledExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text,
                let handler = transpiler.modifierHandlers[modName] {
-                
-                if let result = handler.handle(node: mod, context: transpiler) {
+                let results = handler.handle(node: mod, context: transpiler)
+                for result in results {
                     switch result {
                     case .style(let key, let val): styles.append("\(key): \(val)")
                     case .prop(let key, let val): extraProps.append("\(key)={\(val)}")
@@ -187,7 +175,20 @@ class Visitor: SyntaxVisitor {
             extraProps.append("style={{ \(styles.joined(separator: ", ")) }}")
         }
         
+        // 2. Delegate to Handler
         let handler = transpiler.handlers[name] ?? transpiler.genericHandler
-        transpiler.output += handler.handle(node: node, props: extraProps, context: transpiler)
+        let (output, traverseChildren) = handler.handle(node: node, props: extraProps, context: transpiler)
+        
+        transpiler.output += output
+        
+        // 3. Handle Children based on Handler decision
+        if traverseChildren && node.trailingClosure != nil {
+            self.walk(node.trailingClosure!)
+        }
+        
+        // 4. Close Tag (If we traversed children)
+        if traverseChildren && node.trailingClosure != nil {
+            transpiler.output += "</\(name)>\n"
+        }
     }
 }

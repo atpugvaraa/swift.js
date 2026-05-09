@@ -54,6 +54,36 @@ public class Transpiler {
     private func registerDefaultHandlers() {
         handlers["Text"] = TextHandler()
         handlers["Button"] = ButtonHandler()
+        handlers["VStack"] = VStackHandler()
+        handlers["HStack"] = HStackHandler()
+        handlers["ZStack"] = ZStackHandler()
+        handlers["ScrollView"] = ScrollViewHandler()
+        handlers["NavigationStack"] = NavigationStackHandler()
+        handlers["Spacer"] = SpacerHandler()
+        handlers["Image"] = ImageHandler()
+        handlers["TextField"] = TextFieldHandler()
+        
         modifierHandlers["padding"] = PaddingHandler()
+        
+        // Styling Modifiers
+        modifierHandlers["background"] = BackgroundHandler()
+        modifierHandlers["opacity"] = OpacityHandler()
+        modifierHandlers["blendMode"] = BlendModeHandler()
+        modifierHandlers["foregroundStyle"] = ForegroundStyleHandler()
+        modifierHandlers["font"] = FontHandler()
+        modifierHandlers["fontWeight"] = FontWeightHandler()
+        
+        // Layout Modifiers
+        modifierHandlers["frame"] = FrameHandler()
+        modifierHandlers["ignoresSafeArea"] = IgnoresSafeAreaHandler()
+        
+        // Event Modifiers
+        modifierHandlers["onTapGesture"] = OnTapGestureHandler()
+        modifierHandlers["onHover"] = OnHoverHandler()
+        
+        // Animation Modifiers
+        modifierHandlers["rotationEffect"] = RotationEffectHandler()
+        modifierHandlers["scaleEffect"] = ScaleEffectHandler()
+        modifierHandlers["animation"] = AnimationHandler()
     }
 }

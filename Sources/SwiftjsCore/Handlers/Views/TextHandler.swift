@@ -9,14 +9,13 @@ import SwiftSyntax
 import Foundation
 
 struct TextHandler: ViewHandler {
-    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> String {
+    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> (output: String, traverseChildren: Bool) {
         guard let firstArg = node.arguments.first?.expression else {
-            return "<Text content=\"\" />\n"
+            return ("<Text content=\"\" />\n", false)
         }
         
         var textContent = firstArg.description
         
-        // --- FIX: Regex Replace \(...) -> ${...} ---
         if textContent.contains("\\(") {
             do {
                 // Pattern: matches \( capture_group )
@@ -43,6 +42,6 @@ struct TextHandler: ViewHandler {
         }
         
         let allProps = props.joined(separator: " ")
-        return "<Text content=\(textContent) \(allProps) />\n"
+        return ("<Text content=\(textContent) \(allProps) />\n", false)
     }
 }

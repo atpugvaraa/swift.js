@@ -14,5 +14,5 @@ public enum ModifierResult {
 }
 
 public protocol ModifierHandler {
-    func handle(node: FunctionCallExprSyntax, context: Transpiler) -> ModifierResult?
+    func handle(node: FunctionCallExprSyntax, context: Transpiler) -> [ModifierResult]
 }

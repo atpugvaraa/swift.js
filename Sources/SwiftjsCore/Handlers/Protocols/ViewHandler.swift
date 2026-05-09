@@ -7,12 +7,11 @@
 
 import SwiftSyntax
 
-/// A contract for any object that knows how to translate a specific Swift View into React code.
 public protocol ViewHandler {
-    /// Translates a FunctionCallExprSyntax (e.g., `VStack { }`) into a React string.
-    /// - Parameters:
-    ///   - node: The syntax node representing the function call.
-    ///   - context: The main transpiler instance (to access shared state/config).
-    /// - Returns: The generated JSX string (opening tag).
-    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> String
+    /// Translates a View.
+    /// - Returns: A tuple containing:
+    ///    - `output`: The generated JSX string (e.g. `<Button ... />` or `<VStack>`)
+    ///    - `traverseChildren`: If true, the Visitor will walk the trailing closure as children.
+    ///                          If false, the Visitor stops here (self-closing).
+    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> (output: String, traverseChildren: Bool)
 }

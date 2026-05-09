@@ -8,8 +8,8 @@
 import SwiftSyntax
 
 struct GenericViewHandler: ViewHandler {
-    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> String {
-        guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text else { return "" }
+    func handle(node: FunctionCallExprSyntax, props: [String], context: Transpiler) -> (output: String, traverseChildren: Bool) {
+            guard let name = node.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text else { return ("", false) }
         
         var standardProps = ""
         
@@ -39,9 +39,9 @@ struct GenericViewHandler: ViewHandler {
         let allProps = standardProps + " " + props.joined(separator: " ")
         
         if node.trailingClosure == nil {
-            return "<\(name)\(allProps) />\n"
+                    return ("<\(name)\(allProps) />\n", false)
         } else {
-            return "<\(name)\(allProps)>\n"
+            return ("<\(name)\(allProps)>\n", true) // Visit children
         }
     }
 }

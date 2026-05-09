@@ -5,7 +5,6 @@
 //  Created by Aarav Gupta on 17/12/25.
 //
 
-// Sources/SwiftJSCLI/Commands/New.swift
 import ArgumentParser
 import Foundation
 
@@ -16,12 +15,14 @@ struct New: ParsableCommand {
     var name: String
 
     func run() throws {
+        try DependencyManager.ensureAll()
+        
         let fileManager = FileManager.default
         let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath)
         let projectDir = cwd.appendingPathComponent(name)
         
         // 1. Create Project Folder
-        print("🚀 Creating project \(name)...")
+        print("Creating project \(name)...")
         try fileManager.createDirectory(at: projectDir, withIntermediateDirectories: true)
         
         // 2. Generate Swift Source Structure
@@ -33,20 +34,19 @@ struct New: ParsableCommand {
         try writeTemplateFiles(to: projectDir)
         
         // 4. Scaffold Runtime (.build folder)
-        // Note: We use .build/web to avoid conflict with SPM's internal .build
-        let runtimeDir = projectDir.appendingPathComponent(".build/web")
-        print("⚙️  Scaffolding Web Runtime...")
+        // Note: We use dist to avoid conflict with SPM's internal .build
+        let runtimeDir = projectDir.appendingPathComponent("dist")
+        print("Scaffolding Web Runtime...")
         
-        // Run create-swiftjs-app (Assuming it's in PATH or bundled)
-        // For now, we simulate the call:
-        try shell("create-swiftjs-app new \(runtimeDir.path) --template starter")
+        // Run create-swiftjs-app
+        try shell("/Users/aaravgupta/Programming/Go/create-swiftjs-app/create-swiftjs-app new \(runtimeDir.path) --template starter")
         
         // 5. Install Runtime Deps
-        print("📦 Installing dependencies...")
+        print("Installing dependencies...")
         try shell("cd \(runtimeDir.path) && bun install")
         
-        print("\n✅ Project \(name) ready!")
-        print("👉 cd \(name) && swiftjs run")
+        print("\n Project \(name) ready!")
+        print("cd \(name) && swiftjs run")
     }
     
     private func writeTemplateFiles(to dir: URL) throws {
@@ -56,7 +56,7 @@ struct New: ParsableCommand {
         import PackageDescription
         let package = Package(
             name: "\(name)",
-            platforms: [.macOS(.v13)],
+            platforms: [.macOS(.v13), .iOS(.v13)],
             dependencies: [],
             targets: [.executableTarget(name: "App", path: "Sources")]
         )
@@ -88,6 +88,7 @@ struct New: ParsableCommand {
         let gitignore = """
         .build
         .swiftpm
+        dist
         """
         try gitignore.write(to: dir.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
     }
