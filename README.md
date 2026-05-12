@@ -5,18 +5,18 @@ I'd like to call it SwiftUI for the web <3
 
 to install:
 ```sh
-brew tap atpugvaraa/swiftjs
+brew tap atpugvaraa/atpugvaraa
 brew install swiftjs
 ```
 
 to use:
 ```sh
-swiftjs new # creates swiftjs application
+swiftjs new ProjectName # creates swiftjs application
 ```
 
 to run app:
 ```sh
-swiftjs run # runs application
+cd ProjectName && swiftjs run # runs application
 ```
 
 

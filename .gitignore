@@ -8,3 +8,4 @@ DerivedData/
 .netrc
 /SwiftUI-Web-Runtime/.idea
 Package.resolved
+/.vscode

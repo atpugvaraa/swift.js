@@ -7,11 +7,10 @@ let package = Package(
     name: "swiftjs",
     platforms: [
         .macOS(.v15),
-        .iOS(.v18),
     ],
     products: [
-        .library(name: "SwiftjsCore", targets: ["SwiftjsCore"]),
-        .executable(name: "swiftjs", targets: ["SwiftjsCLI"]),
+        .library(name: "Core", targets: ["Core"]),
+        .executable(name: "swiftjs", targets: ["CLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", .upToNextMajor(from: "602.0.0")),
@@ -20,7 +19,7 @@ let package = Package(
     targets: [
         // 1. Core Module
         .target(
-            name: "SwiftjsCore",
+            name: "Core",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftParser", package: "swift-syntax"),
@@ -28,11 +27,15 @@ let package = Package(
         ),
         // 2. The Runner (macOS only typically, but code is separate)
         .executableTarget(
-            name: "SwiftjsCLI",
+            name: "CLI",
             dependencies: [
-                "SwiftjsCore",
+                "Core",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
+        ),
+        .testTarget(
+            name: "CoreTests",
+            dependencies: ["Core"]
         ),
     ]
 )
