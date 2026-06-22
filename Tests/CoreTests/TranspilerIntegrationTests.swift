@@ -28,7 +28,7 @@ final class TranspilerIntegrationTests: XCTestCase {
 
             struct Page: View {
                 var body: some View {
-                    NavigationStack {
+                    List {
                         Text("Hello").shadow(radius: 4)
                     }
                 }
@@ -39,8 +39,8 @@ final class TranspilerIntegrationTests: XCTestCase {
         let output = transpiler.transpile(source)
 
         XCTAssertTrue(output.contains("import { Text } from '@swiftjs/runtime';"))
-        XCTAssertFalse(output.contains("import { NavigationStack"))
-        XCTAssertTrue(output.contains("// Unsupported components: NavigationStack"))
-        XCTAssertTrue(output.contains("// Unsupported modifiers: shadow"))
+        XCTAssertFalse(output.contains("import { List"))
+        XCTAssertTrue(output.contains("// ⚠️ Unsupported runtime component: List"))
+        XCTAssertTrue(output.contains("// ⚠️ Unsupported modifier: shadow"))
     }
 }

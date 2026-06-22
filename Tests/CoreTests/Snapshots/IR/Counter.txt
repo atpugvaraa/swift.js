@@ -1,0 +1,4 @@
+File:
+  Component: Counter
+    State: count (int)
+    Body: VStack

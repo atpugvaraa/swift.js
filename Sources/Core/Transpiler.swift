@@ -45,7 +45,16 @@ public class Transpiler {
         
         // 3. Emission to TypeScript
         let emitter = FileEmitter()
-        return emitter.emit(irFile)
+        var output = emitter.emit(irFile)
+        
+        // 4. Prepend Diagnostics
+        let diagnostics = lowerer.getDiagnostics()
+        if !diagnostics.isEmpty {
+            let diagnosticComments = diagnostics.map { "// \($0)" }.joined(separator: "\n")
+            output = diagnosticComments + "\n\n" + output
+        }
+        
+        return output
     }
     
     private func registerDefaultHandlers() {

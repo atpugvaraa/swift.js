@@ -165,6 +165,64 @@ public final class CapabilityRegistry {
             supportsBindings: true,
             supportsEvents: true
         ))
+        registerComponent(RuntimeComponentCapability(
+            name: "Toggle",
+            supportedProperties: ["isOn", "label"],
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "Label",
+            supportedProperties: ["title", "systemImage"]
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "Slider",
+            supportedProperties: ["value", "min", "max", "step", "onChange"],
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "Stepper",
+            supportedProperties: ["value", "min", "max", "step", "onChange", "label"],
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "Picker",
+            supportedProperties: ["selection", "label", "options"],
+            supportsChildren: true,
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "DatePicker",
+            supportedProperties: ["selection", "label"],
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "ColorPicker",
+            supportedProperties: ["selection", "label"],
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "SecureField",
+            supportedProperties: ["text", "placeholder"],
+            supportsBindings: true,
+            supportsEvents: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "NavigationLink",
+            supportedProperties: ["href", "target", "replace", "destination", "label"],
+            supportsChildren: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "TabView",
+            supportedProperties: ["initialTab", "labels", "selection"],
+            supportsChildren: true,
+            supportsBindings: true
+        ))
+        registerComponent(RuntimeComponentCapability(
+            name: "NavigationStack",
+            supportedProperties: ["initialRoute"],
+            supportsChildren: true
+        ))
+
         
         // Register all supported modifiers
         for modifier in [

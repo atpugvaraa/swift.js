@@ -28,12 +28,14 @@ public class ViewLowerer {
         guard context.componentRegistry.isComponent(componentName) else {
             return nil
         }
-        context.markComponentUsed(componentName)
-        
         // Validate runtime capabilities
-        if !context.capabilityRegistry.supportsComponent(componentName) && 
-           context.componentRegistry.definition(for: componentName)?.kind == .runtimeView {
+        let isRuntimeView = context.componentRegistry.definition(for: componentName)?.kind == .runtimeView
+        let isSupported = context.capabilityRegistry.supportsComponent(componentName)
+        
+        if isRuntimeView && !isSupported {
             context.addDiagnostic("⚠️ Unsupported runtime component: \(componentName)")
+        } else {
+            context.markComponentUsed(componentName)
         }
 
         var properties: [IRProperty] = []
@@ -47,6 +49,14 @@ public class ViewLowerer {
                 case "Text": propName = "content"
                 case "Button" where index == 0: propName = "title"
                 case "Image": propName = "name"
+                case "Label" where index == 0: propName = "title"
+                case "Toggle" where index == 0: propName = "label"
+                case "Stepper" where index == 0: propName = "label"
+                case "Picker" where index == 0: propName = "label"
+                case "DatePicker" where index == 0: propName = "label"
+                case "ColorPicker" where index == 0: propName = "label"
+                case "SecureField" where index == 0: propName = "placeholder"
+                case "NavigationLink" where index == 0: propName = "label"
                 default: propName = "arg\(index)"
                 }
             }

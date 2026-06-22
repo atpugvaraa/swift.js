@@ -10,8 +10,8 @@ final class IRFoundationTests: XCTestCase {
     }
 
     func testIRModifierStoresEffects() {
-        let modifier = IRModifier(name: "padding", arguments: [.numberLiteral(8)])
-        modifier.effects = [.styleProperty(key: "padding", value: .numberLiteral(8))]
+        let modifier = IRModifier(name: "padding", arguments: [.numberLiteral(8.0)])
+        modifier.effects = [IRModifierEffect.style(key: "padding", value: IRExpression.numberLiteral(8.0))]
         XCTAssertEqual(modifier.name, "padding")
         XCTAssertEqual(modifier.effects.count, 1)
     }

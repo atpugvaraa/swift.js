@@ -1,0 +1,4 @@
+File:
+  Component: ToggleView
+    State: isOn (bool)
+    Body: VStack

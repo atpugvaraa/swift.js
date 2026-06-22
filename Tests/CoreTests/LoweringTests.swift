@@ -5,12 +5,14 @@ import XCTest
 @testable import Core
 
 final class LoweringTests: XCTestCase {
-    func testFileLowererFindsUppercaseFunctionComponent() {
+    func testFileLowererFindsStructComponent() {
         let source = """
             import SwiftUI
 
-            func Counter() {
-                Text("Hello")
+            struct Counter: View {
+                var body: some View {
+                    Text("Hello")
+                }
             }
             """
         let syntax = Parser.parse(source: source)

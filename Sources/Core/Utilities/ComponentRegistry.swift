@@ -71,7 +71,16 @@ public final class ComponentRegistry {
             ComponentDefinition(name: "List", kind: .runtimeView, supportsChildren: true),
             ComponentDefinition(name: "ForEach", kind: .runtimeView, supportsChildren: true),
             ComponentDefinition(name: "Section", kind: .runtimeView, supportsChildren: true),
-            ComponentDefinition(name: "Toggle", kind: .runtimeView)
+            ComponentDefinition(name: "Toggle", kind: .runtimeView),
+            ComponentDefinition(name: "Label", kind: .runtimeView),
+            ComponentDefinition(name: "Slider", kind: .runtimeView),
+            ComponentDefinition(name: "Stepper", kind: .runtimeView),
+            ComponentDefinition(name: "Picker", kind: .runtimeView, supportsChildren: true),
+            ComponentDefinition(name: "DatePicker", kind: .runtimeView),
+            ComponentDefinition(name: "ColorPicker", kind: .runtimeView),
+            ComponentDefinition(name: "SecureField", kind: .runtimeView),
+            ComponentDefinition(name: "NavigationLink", kind: .runtimeView, supportsChildren: true),
+            ComponentDefinition(name: "TabView", kind: .runtimeView, supportsChildren: true)
         ]
         
         for view in runtimeViews {
