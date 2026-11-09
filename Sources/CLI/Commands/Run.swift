@@ -18,24 +18,13 @@ struct Run: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Run the project")
 
     func run() throws {
-        try DependencyManager.ensureAll()
+        try Template.requireBun()
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
 
         // 1. Verify Project
         guard fm.fileExists(atPath: cwd.appendingPathComponent("Package.swift").path) else {
             throw ValidationError("Not a swift.js project: no Package.swift in \(cwd.path)")
-        }
-
-        // 2. Read Config (if present)
-        // The Go CLI places the config inside the scaffolding target (e.g. 'dist/')
-        if let config = SwiftJSConfig.load(from: cwd) ?? SwiftJSConfig.load(from: cwd.appendingPathComponent("dist")) {
-            print(
-                "📦 Project: \(config.name) (template \(config.versions.template), runtime \(config.versions.runtime))"
-            )
-        } else {
-            print(
-                "⚠️  No swiftjs.config.json found. Running with defaults (legacy project).")
         }
 
         // 3. Locate Runtime
@@ -45,10 +34,7 @@ struct Run: ParsableCommand {
 
         if !fm.fileExists(atPath: runtimeDir.path) {
             print("Runtime missing. Attempting to repair...")
-            let binary = ToolchainManager.binaryPath()
-            try shell("\(binary) new \(runtimeDir.path) --template starter")
-            print("Installing runtime dependencies...")
-            try shell("cd \(runtimeDir.path) && bun install")
+            try Template.scaffold(into: runtimeDir)
         }
 
         // 4. Traverse & Transpile (1:1 Mapping)
@@ -93,7 +79,7 @@ struct Run: ParsableCommand {
 
         // 5. Prettier & ESLint
         print("Formatting code...")
-        try shell("cd \(runtimeDir.path) && bun x prettier --write src/")
+        try shell("cd \(quoted(runtimeDir.path)) && bun x prettier --write src/")
 
         // 6. Run Bun
         print("Starting Server...")

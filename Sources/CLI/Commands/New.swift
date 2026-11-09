@@ -15,7 +15,7 @@ struct New: ParsableCommand {
     var name: String
 
     func run() throws {
-        try DependencyManager.ensureAll()
+        try Template.requireBun()
 
         let fileManager = FileManager.default
         let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath)
@@ -37,10 +37,7 @@ struct New: ParsableCommand {
         // Note: We use dist to avoid conflict with SPM's internal .build
         let runtimeDir = projectDir.appendingPathComponent("dist")
         print("Scaffolding Web Runtime...")
-
-        // Run create-swiftjs-app using the managed binary
-        let binary = ToolchainManager.binaryPath()
-        try shell("\(binary) new \(runtimeDir.path) --template starter")
+        try Template.scaffold(into: runtimeDir)
 
         print("\n Project \(name) ready!")
         print("cd \(name) && swiftjs run")
