@@ -22,7 +22,7 @@ struct swiftjs: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "SwiftUI on Web Toolchain",
         version: "0.1.0",
-        subcommands: [New.self, Run.self, Watch.self],
+        subcommands: [New.self, Run.self],
         defaultSubcommand: Run.self
     )
 }
