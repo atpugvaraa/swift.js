@@ -146,4 +146,20 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("Page.swift:6:31: error: not yet supported: alignment .topLeading"), "\(error)")
         }
     }
+
+    func testBodyWithSeveralRootViewsIsReported() {
+        let twoRootViews = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    Text("One")
+                    Text("Two")
+                }
+            }
+            """
+        XCTAssertThrowsError(try Transpiler().transpile(twoRootViews)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: body with 2 statements"), "\(error)")
+        }
+    }
 }

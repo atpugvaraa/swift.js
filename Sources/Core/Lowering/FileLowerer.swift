@@ -111,12 +111,7 @@ public class FileLowerer {
             return nil
         }
         
-        var bodyNode: IRViewNode? = nil
-        if let body = funcDecl.body,
-           let lastStatement = body.statements.last,
-           let exprStmt = lastStatement.item.as(ExpressionStmtSyntax.self) {
-            bodyNode = viewLowerer.lowerViewExpression(exprStmt.expression)
-        }
+        let bodyNode = funcDecl.body.flatMap { lowerViewBody($0.statements) }
         
         return IRComponent(
             name: name,
@@ -160,11 +155,7 @@ public class FileLowerer {
             }
             
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self), funcDecl.name.text == "body" {
-                if let body = funcDecl.body,
-                   let lastStatement = body.statements.last,
-                   let exprStmt = lastStatement.item.as(ExpressionStmtSyntax.self) {
-                    bodyNode = viewLowerer.lowerViewExpression(exprStmt.expression)
-                }
+                bodyNode = funcDecl.body.flatMap { lowerViewBody($0.statements) }
             }
             
             if let propDecl = member.decl.as(VariableDeclSyntax.self) {
@@ -180,23 +171,11 @@ public class FileLowerer {
                             case .accessors(let list):
                                 for acc in list {
                                     if acc.accessorSpecifier.text == "get", let block = acc.body {
-                                        if let lastStatement = block.statements.last {
-                                            if let expr = lastStatement.item.as(ExprSyntax.self) {
-                                                bodyNode = viewLowerer.lowerViewExpression(expr)
-                                            } else if let exprStmt = lastStatement.item.as(ExpressionStmtSyntax.self) {
-                                                bodyNode = viewLowerer.lowerViewExpression(exprStmt.expression)
-                                            }
-                                        }
+                                        bodyNode = lowerViewBody(block.statements)
                                     }
                                 }
                             case .getter(let block):
-                                if let lastStatement = block.last {
-                                    if let expr = lastStatement.item.as(ExprSyntax.self) {
-                                        bodyNode = viewLowerer.lowerViewExpression(expr)
-                                    } else if let exprStmt = lastStatement.item.as(ExpressionStmtSyntax.self) {
-                                        bodyNode = viewLowerer.lowerViewExpression(exprStmt.expression)
-                                    }
-                                }
+                                bodyNode = lowerViewBody(block)
                             }
                         }
                     }
@@ -211,6 +190,23 @@ public class FileLowerer {
         )
     }
     
+    /// Lowers a view body that is a single view expression. Several statements (an implicit
+    /// TupleView, or code before the view) are reported rather than keeping only the last one.
+    private func lowerViewBody(_ statements: CodeBlockItemListSyntax) -> IRViewNode? {
+        guard statements.count == 1, let item = statements.first else {
+            if statements.count > 1 {
+                context.addDiagnostic("not yet supported: body with \(statements.count) statements", at: statements)
+            }
+            return nil
+        }
+        let expr = item.item.as(ExprSyntax.self) ?? item.item.as(ExpressionStmtSyntax.self)?.expression
+        guard let expr, let view = viewLowerer.lowerViewExpression(expr) else {
+            context.addDiagnostic("not yet supported: body \(item.item.kind)", at: item)
+            return nil
+        }
+        return view
+    }
+
     /// View members the lowerer handles: `var body` and `@State var x = initial`.
     private func isSupportedViewMember(_ decl: DeclSyntax) -> Bool {
         if let funcDecl = decl.as(FunctionDeclSyntax.self) { return funcDecl.name.text == "body" }
