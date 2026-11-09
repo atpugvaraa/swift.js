@@ -1,7 +1,13 @@
 import Foundation
 
-@discardableResult
-func shell(_ command: String) throws -> Int32 {
+struct ShellError: Error, CustomStringConvertible {
+    let command: String
+    let status: Int32
+    var description: String { "Command failed (exit \(status)): \(command)" }
+}
+
+/// Runs `command` in zsh, streaming its output. Throws if it exits non-zero.
+func shell(_ command: String) throws {
     let process = Process()
 
     process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -13,5 +19,7 @@ func shell(_ command: String) throws -> Int32 {
     try process.run()
     process.waitUntilExit()
 
-    return process.terminationStatus
+    guard process.terminationStatus == 0 else {
+        throw ShellError(command: command, status: process.terminationStatus)
+    }
 }

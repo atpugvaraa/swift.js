@@ -24,8 +24,7 @@ struct Run: ParsableCommand {
 
         // 1. Verify Project
         guard fm.fileExists(atPath: cwd.appendingPathComponent("Package.swift").path) else {
-            print("Not a swift.js compatible project (missing Package.swift)")
-            return
+            throw ValidationError("Not a swift.js project: no Package.swift in \(cwd.path)")
         }
 
         // 2. Read Config (if present)
