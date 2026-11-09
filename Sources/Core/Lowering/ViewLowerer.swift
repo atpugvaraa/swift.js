@@ -33,7 +33,7 @@ public class ViewLowerer {
         let isSupported = context.capabilityRegistry.supportsComponent(componentName)
         
         if isRuntimeView && !isSupported {
-            context.addDiagnostic("⚠️ Unsupported runtime component: \(componentName)")
+            context.addDiagnostic("not yet supported: view \(componentName)", at: callExpr)
         } else {
             context.markComponentUsed(componentName)
         }
@@ -63,7 +63,8 @@ public class ViewLowerer {
                 
             // Validate property
             if !context.capabilityRegistry.supportsProperty(propName, on: componentName) {
-                context.addDiagnostic("⚠️ Unsupported property '\(propName)' on '\(componentName)'")
+                let argument = arg.label.map { "argument '\($0.text):'" } ?? "unlabeled argument \(index + 1)"
+                context.addDiagnostic("not yet supported: \(componentName) \(argument)", at: arg)
             }
 
             let property = IRProperty(

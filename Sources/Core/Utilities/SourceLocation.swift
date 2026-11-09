@@ -23,13 +23,12 @@ public struct SourceLocation: CustomStringConvertible {
     }
     
     /// Extract SourceLocation from a SwiftSyntax node
-    public static func from(_ node: SyntaxProtocol, file: String = "input.swift") -> SourceLocation {
-        // For now, use simplified location info
-        // SwiftSyntax doesn't expose line/column directly on AbsolutePosition in all versions
+    public static func from(_ node: any SyntaxProtocol, converter: SourceLocationConverter, file: String) -> SourceLocation {
+        let start = node.startLocation(converter: converter)
         return SourceLocation(
             file: file,
-            line: 1,
-            column: 1,
+            line: start.line,
+            column: start.column,
             length: node.trimmedLength.utf8Length
         )
     }

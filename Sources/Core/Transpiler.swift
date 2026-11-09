@@ -9,23 +9,35 @@ import Foundation
 import SwiftSyntax
 import SwiftParser
 
+/// Valid Swift that swift.js cannot translate yet, with the location of each construct.
+public struct TranspileError: Error, CustomStringConvertible {
+    public let diagnostics: [DiagnosticMessage]
+
+    public var description: String {
+        diagnostics.map(\.description).joined(separator: "\n")
+    }
+}
+
 public class Transpiler {
     public init() {}
 
     /// Transpiles SwiftUI source to TSX: parse → lower to IR (with semantic analysis) → emit.
-    public func transpile(_ source: String) -> String {
+    /// Throws `TranspileError` rather than emitting TSX for anything it cannot translate.
+    public func transpile(_ source: String, fileName: String = "input.swift") throws -> String {
         let sourceFile = Parser.parse(source: source)
 
         let lowerer = FileLowerer()
-        let irFile = lowerer.lower(sourceFile)
-        var output = FileEmitter().emit(irFile)
+        let irFile = lowerer.lower(sourceFile, fileName: fileName)
 
         let diagnostics = lowerer.getDiagnostics()
-        if !diagnostics.isEmpty {
-            let diagnosticComments = diagnostics.map { "// \($0)" }.joined(separator: "\n")
-            output = diagnosticComments + "\n\n" + output
+        guard diagnostics.isEmpty else {
+            let byPosition = diagnostics.sorted {
+                ($0.sourceLocation?.line ?? 0, $0.sourceLocation?.column ?? 0)
+                    < ($1.sourceLocation?.line ?? 0, $1.sourceLocation?.column ?? 0)
+            }
+            throw TranspileError(diagnostics: byPosition)
         }
 
-        return output
+        return FileEmitter().emit(irFile)
     }
 }

@@ -4,8 +4,14 @@ import SwiftSyntax
 /// Tracks state and context during the lowering process from SwiftSyntax AST to IR.
 /// Manages the symbol table for name resolution and capability registry for validation.
 public class LoweringContext {
-    /// Diagnostic messages collected during lowering
-    public private(set) var diagnostics: [String] = []
+    /// Constructs that could not be lowered, as errors with source locations
+    public private(set) var diagnostics: [DiagnosticMessage] = []
+
+    /// Maps syntax positions to line/column; set per file by FileLowerer
+    public var locationConverter: SourceLocationConverter?
+
+    /// File name used in diagnostic locations
+    public var fileName = "input.swift"
     
     /// The symbol table for tracking definitions across scopes
     public let symbolTable: SymbolTable
@@ -49,12 +55,12 @@ public class LoweringContext {
     
     // MARK: - Diagnostics
     
-    public func addDiagnostic(_ message: String) {
-        diagnostics.append(message)
-    }
-    
-    public func hasErrors() -> Bool {
-        return diagnostics.contains { $0.lowercased().contains("error") }
+    /// Records valid Swift that swift.js cannot translate yet. Any such error fails transpilation.
+    public func addDiagnostic(_ message: String, at node: (any SyntaxProtocol)? = nil) {
+        let location = node.flatMap { node in
+            locationConverter.map { SourceLocation.from(node, converter: $0, file: fileName) }
+        }
+        diagnostics.append(DiagnosticMessage(severity: .error, message: message, sourceLocation: location))
     }
     
     // MARK: - Imports

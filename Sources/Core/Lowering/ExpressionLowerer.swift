@@ -108,6 +108,8 @@ public class ExpressionLowerer {
             if name.hasPrefix("$") {
                 let baseName = String(name.dropFirst())
                 let kind: IRBindingKind = inferBindingKind(baseName)
+                // Emitted as a one-way value today; two-way bindings need value + onChange.
+                context.addDiagnostic("not yet supported: binding \(name)", at: exprSyntax)
                 return .binding(IRBinding(variableName: baseName, kind: kind))
             }
             
@@ -135,9 +137,8 @@ public class ExpressionLowerer {
         }
         
         // Optional chaining via member access
-        if let optionalChain = exprSyntax.as(OptionalChainingExprSyntax.self) {
-            let base = lower(optionalChain.expression)
-            return .forceUnwrap(base) // Will be handled as optional chain in context
+        if exprSyntax.is(OptionalChainingExprSyntax.self) {
+            return unsupported("optional chaining ?.", at: exprSyntax)
         }
         
         // Function calls
@@ -148,7 +149,10 @@ public class ExpressionLowerer {
                 return .view(viewNode)
             }
             
-            // 2. Fallback to regular function call
+            // 2. Other calls (methods, initializers, functions) have no JS mapping yet and
+            //    would be emitted verbatim, e.g. `isOn.toggle()` or `UUID()`.
+            context.addDiagnostic(
+                "not yet supported: call to \(funcCall.calledExpression.trimmedDescription)()", at: funcCall)
             let callee = lower(funcCall.calledExpression)
             let arguments = funcCall.arguments.map { arg -> IRArgument in
                 IRArgument(label: arg.label?.text, value: lower(arg.expression))
@@ -208,15 +212,12 @@ public class ExpressionLowerer {
         }
         
         // Switch expressions
-        if let switchExpr = exprSyntax.as(SwitchExprSyntax.self) {
-            context.addDiagnostic("Switch expressions not yet fully supported in expression context")
-            return .unknown(reason: "Switch expressions not yet supported")
+        if exprSyntax.is(SwitchExprSyntax.self) {
+            return unsupported("switch expression", at: exprSyntax)
         }
         
         // Fallback — emit diagnostic and return .unknown
-        let typeName = "\(type(of: exprSyntax))"
-        context.addDiagnostic("Unhandled expression type: \(typeName)")
-        return .unknown(reason: "Unhandled expression type: \(typeName)")
+        return unsupported("expression \(exprSyntax.kind)", at: exprSyntax)
     }
     
     // MARK: - String Literal Lowering (with interpolation)
@@ -274,8 +275,7 @@ public class ExpressionLowerer {
         }
         
         // Fallback for unknown operator shapes
-        context.addDiagnostic("Unknown infix operator shape: \(type(of: infix.operator))")
-        return .unknown(reason: "Unknown infix operator shape: \(type(of: infix.operator))")
+        return unsupported("operator \(infix.operator.trimmedDescription)", at: infix)
     }
     
     // MARK: - Sequence Expression Lowering
@@ -311,7 +311,7 @@ public class ExpressionLowerer {
             if elements[1].is(UnresolvedTernaryExprSyntax.self) {
                 // elements[0] = condition, elements[1] = ? then :, elements[2] = else
                 // Swift syntax represents ternary differently; this is a simplification
-                return .ternary(condition: lhs, thenExpr: .unknown(reason: "Ternary then part unresolved in sequence"), elseExpr: rhs)
+                return unsupported("ternary ?: expression", at: seq)
             }
         }
         
@@ -333,8 +333,7 @@ public class ExpressionLowerer {
             return result
         }
         
-        context.addDiagnostic("Could not fold sequence expression with \(elements.count) elements")
-        return .unknown(reason: "Sequence folding failed")
+        return unsupported("expression of \(elements.count) parts", at: seq)
     }
     
     // MARK: - Prefix Operator Lowering
@@ -357,8 +356,7 @@ public class ExpressionLowerer {
         }
         
         // Other postfix operators are rare; treat as the operand
-        context.addDiagnostic("Unknown postfix operator: \(opText)")
-        return .unknown(reason: "Unknown postfix operator: \(opText)")
+        return unsupported("postfix operator \(opText)", at: postfix)
     }
     
     // MARK: - Member Access Lowering
@@ -406,7 +404,15 @@ public class ExpressionLowerer {
     
     // MARK: - Closure Lowering
     
+    /// Records valid Swift that cannot be translated yet and returns a placeholder that is never emitted.
+    private func unsupported(_ what: String, at node: some SyntaxProtocol) -> IRExpression {
+        context.addDiagnostic("not yet supported: \(what)", at: node)
+        return .unknown(reason: what)
+    }
+
     private func lowerClosure(_ closure: ClosureExprSyntax) -> IRExpression {
+        // The emitter cannot output closure bodies yet; fail instead of emitting an empty function.
+        context.addDiagnostic("not yet supported: closure expression", at: closure)
         // Extract parameters
         var parameters: [IRClosureParameter] = []
         
@@ -475,22 +481,8 @@ public class ExpressionLowerer {
     // MARK: - If Expression Lowering (Swift 5.9+ if expressions)
     
     private func lowerIfExpression(_ ifExpr: IfExprSyntax) -> IRExpression {
-        // Lower condition
-        let condition: IRExpression
-        if let firstCond = ifExpr.conditions.first,
-           let condExpr = firstCond.condition.as(ExprSyntax.self) {
-            condition = lower(condExpr)
-        } else {
-            condition = .boolLiteral(true)
-        }
-        
-        // For if-expressions used as values, we model as ternary
-        // Full support requires block expressions in IR
-        return .ternary(
-            condition: condition,
-            thenExpr: .unknown(reason: "If-expression then branch not yet lowered"),
-            elseExpr: .unknown(reason: "If-expression else branch not yet lowered")
-        )
+        // Branch bodies are not lowered yet; report instead of emitting a broken ternary.
+        return unsupported("if inside a view or expression", at: ifExpr)
     }
     
     private func inferBindingKind(_ baseName: String) -> IRBindingKind {

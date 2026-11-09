@@ -44,6 +44,7 @@ struct Run: ParsableCommand {
         // 4. Traverse & Transpile (1:1 Mapping)
         print("Transpiling Sources...")
         let sourcesDir = cwd.appendingPathComponent("Sources")
+        var unsupported: [TranspileError] = []
 
         if let enumerator = fm.enumerator(
             at: sourcesDir, includingPropertiesForKeys: [.isDirectoryKey])
@@ -73,12 +74,23 @@ struct Run: ParsableCommand {
                     // Transpile
                     print("   📄 \(relativePath) -> \(targetPath)")
                     let swiftCode = try String(contentsOf: fileURL, encoding: .utf8)
-                    let transpiler = Transpiler()
-                    let tsxCode = transpiler.transpile(swiftCode)
-
-                    try tsxCode.write(to: destURL, atomically: true, encoding: .utf8)
+                    do {
+                        let tsxCode = try Transpiler().transpile(swiftCode, fileName: fileURL.path)
+                        try tsxCode.write(to: destURL, atomically: true, encoding: .utf8)
+                    } catch let error as TranspileError {
+                        unsupported.append(error)
+                    }
                 }
             }
+        }
+
+        // Valid SwiftUI that swift.js cannot translate yet: report every location, write nothing broken.
+        guard unsupported.isEmpty else {
+            for error in unsupported {
+                FileHandle.standardError.write(Data((error.description + "\n").utf8))
+            }
+            let count = unsupported.reduce(0) { $0 + $1.diagnostics.count }
+            throw ValidationError("\(count) SwiftUI construct(s) not yet supported by swift.js")
         }
 
         // 5. Prettier & ESLint

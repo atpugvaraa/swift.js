@@ -52,7 +52,7 @@ public class StatementLowerer {
             return .returnStatement(value)
         }
         
-        context.addDiagnostic("Unknown statement: \(type(of: stmtSyntax))")
+        context.addDiagnostic("not yet supported: statement \(stmtSyntax.kind)", at: stmtSyntax)
         return .expression(.identifier("/* unknown statement */"))
     }
     
@@ -76,7 +76,7 @@ public class StatementLowerer {
             return .expression(exprLowerer.lower(expr))
         }
         
-        context.addDiagnostic("Unknown code block item: \(type(of: item.item))")
+        context.addDiagnostic("not yet supported: \(item.item.kind)", at: item)
         return .expression(.identifier("/* unknown code block item */"))
     }
     
@@ -87,7 +87,7 @@ public class StatementLowerer {
         
         guard let binding = varDecl.bindings.first,
               let pattern = binding.pattern.as(IdentifierPatternSyntax.self) else {
-            context.addDiagnostic("Complex variable pattern not yet supported")
+            context.addDiagnostic("not yet supported: destructuring variable pattern", at: varDecl)
             return .expression(.identifier("/* complex var decl */"))
         }
         
@@ -202,7 +202,7 @@ public class StatementLowerer {
         } else {
             // Fallback for complex patterns
             variable = "_"
-            context.addDiagnostic("Complex for-loop pattern not fully supported")
+            context.addDiagnostic("not yet supported: for-in pattern", at: forStmt.pattern)
         }
         
         let sequence = exprLowerer.lower(forStmt.sequence)

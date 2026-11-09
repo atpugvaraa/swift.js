@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single diagnostic emitted by the compiler pipeline
-public struct DiagnosticMessage: Identifiable {
+public struct DiagnosticMessage: Identifiable, CustomStringConvertible {
     public enum Severity: String {
         case error
         case warning
@@ -17,6 +17,12 @@ public struct DiagnosticMessage: Identifiable {
         self.severity = severity
         self.message = message
         self.sourceLocation = sourceLocation
+    }
+
+    /// `file:line:column: error: message`, the format editors and terminals link.
+    public var description: String {
+        let prefix = sourceLocation.map { "\($0): " } ?? ""
+        return "\(prefix)\(severity.rawValue): \(message)"
     }
 }
 

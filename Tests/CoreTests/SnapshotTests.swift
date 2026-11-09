@@ -60,7 +60,9 @@ final class SnapshotTests: XCTestCase {
 
         let syntax = Parser.parse(source: source)
         let lowerer = FileLowerer()
-        let irFile = lowerer.lower(syntax)
+        let irFile = lowerer.lower(syntax, fileName: fileURL.lastPathComponent)
+        // Fixtures must be fully supported SwiftUI; a snapshot of untranslated code proves nothing.
+        XCTAssertEqual(lowerer.getDiagnostics().map(\.description), [], "\(testName) has unsupported constructs")
 
         let emitter = FileEmitter()
         let tsxOutput = emitter.emit(irFile)

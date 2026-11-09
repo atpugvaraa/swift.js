@@ -20,7 +20,10 @@ public class ModifierLowerer {
         
         // Validate against registry
         if !context.capabilityRegistry.supportsModifier(modifierName) {
-            context.addDiagnostic("⚠️ Unsupported modifier: \(modifierName)")
+            context.addDiagnostic("not yet supported: modifier .\(modifierName)", at: callExpr)
+        } else if let closure = callExpr.trailingClosure {
+            // Trailing closures are not read by the effects below; fail rather than drop the handler.
+            context.addDiagnostic("not yet supported: trailing closure on .\(modifierName)", at: closure)
         }
 
         let arguments = callExpr.arguments.map { arg -> IRExpression in

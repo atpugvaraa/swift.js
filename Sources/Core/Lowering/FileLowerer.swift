@@ -21,7 +21,10 @@ public class FileLowerer {
         self.viewLowerer.setStatementLowerer(stmtLowerer)
     }
     
-    public func lower(_ sourceFileSyntax: SourceFileSyntax) -> IRFile {
+    public func lower(_ sourceFileSyntax: SourceFileSyntax, fileName: String = "input.swift") -> IRFile {
+        context.fileName = fileName
+        context.locationConverter = SourceLocationConverter(fileName: fileName, tree: sourceFileSyntax)
+
         // 1. Pre-pass: Semantic Analysis
         let analyzer = SemanticAnalyzer(componentRegistry: context.componentRegistry)
         analyzer.analyze(sourceFileSyntax)
@@ -44,14 +47,15 @@ public class FileLowerer {
         for statement in sourceFileSyntax.statements {
             if statement.item.is(ImportDeclSyntax.self) { continue }
             
-            if let funcDecl = statement.item.as(FunctionDeclSyntax.self) {
-                if let component = lowerFunctionAsComponent(funcDecl) {
-                    components.append(component)
-                }
-            } else if let structDecl = statement.item.as(StructDeclSyntax.self) {
-                if let component = lowerStructAsComponent(structDecl) {
-                    components.append(component)
-                }
+            if let funcDecl = statement.item.as(FunctionDeclSyntax.self),
+               let component = lowerFunctionAsComponent(funcDecl) {
+                components.append(component)
+            } else if let structDecl = statement.item.as(StructDeclSyntax.self),
+                      let component = lowerStructAsComponent(structDecl) {
+                components.append(component)
+            } else {
+                // Only View structs (and component functions) are transpiled so far.
+                context.addDiagnostic("not yet supported: top-level \(declarationName(statement.item))", at: statement)
             }
         }
         
@@ -134,6 +138,11 @@ public class FileLowerer {
         var stateVariables: [IRStateVariable] = []
         
         for member in structDecl.memberBlock.members {
+            if !isSupportedViewMember(member.decl) {
+                context.addDiagnostic(
+                    "not yet supported: \(declarationName(member.decl)) in View \(name)", at: member)
+                continue
+            }
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
                 // Handle @State variables (simplified)
                 if hasStateAttribute(varDecl.attributes) {
@@ -202,6 +211,31 @@ public class FileLowerer {
         )
     }
     
+    /// View members the lowerer handles: `var body` and `@State var x = initial`.
+    private func isSupportedViewMember(_ decl: DeclSyntax) -> Bool {
+        if let funcDecl = decl.as(FunctionDeclSyntax.self) { return funcDecl.name.text == "body" }
+        guard let varDecl = decl.as(VariableDeclSyntax.self),
+              varDecl.bindings.count == 1, let binding = varDecl.bindings.first,
+              let pattern = binding.pattern.as(IdentifierPatternSyntax.self) else { return false }
+        if pattern.identifier.text == "body" { return true }
+        return hasStateAttribute(varDecl.attributes) && binding.initializer != nil
+    }
+
+    /// Short human name for a declaration, e.g. `struct Todo`, `func addTodo`, `var remaining`.
+    private func declarationName(_ node: some SyntaxProtocol) -> String {
+        let syntax = Syntax(node)
+        if let decl = syntax.as(StructDeclSyntax.self) { return "struct \(decl.name.text)" }
+        if let decl = syntax.as(ClassDeclSyntax.self) { return "class \(decl.name.text)" }
+        if let decl = syntax.as(EnumDeclSyntax.self) { return "enum \(decl.name.text)" }
+        if let decl = syntax.as(ExtensionDeclSyntax.self) { return "extension \(decl.extendedType.trimmedDescription)" }
+        if let decl = syntax.as(FunctionDeclSyntax.self) { return "func \(decl.name.text)" }
+        if let decl = syntax.as(VariableDeclSyntax.self) {
+            let names = decl.bindings.map { $0.pattern.trimmedDescription }.joined(separator: ", ")
+            return "\(decl.bindingSpecifier.text) \(names)"
+        }
+        return "\(syntax.kind)"
+    }
+
     private func hasStateAttribute(_ attributes: AttributeListSyntax) -> Bool {
         for attribute in attributes {
             guard let attrSyntax = attribute.as(AttributeSyntax.self) else { continue }
@@ -212,7 +246,7 @@ public class FileLowerer {
         return false
     }
     
-    public func getDiagnostics() -> [String] {
+    public func getDiagnostics() -> [DiagnosticMessage] {
         return context.diagnostics
     }
 }
