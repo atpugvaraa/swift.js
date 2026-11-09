@@ -69,6 +69,15 @@ public class ModifierLowerer {
                 effects.append(.opacity(value))
             }
             
+        case "font":
+            // .font(.largeTitle) -> fontSize: "var(--sw-font-size-large-title)" (@swiftuijs/ui token)
+            if case .memberAccess(_, let style, .implicit)? = arguments.first,
+               let token = Self.fontSizeTokens[style] {
+                effects.append(.style(key: "fontSize", value: .stringLiteral("var(--sw-font-size-\(token))")))
+            } else {
+                effects.append(.custom(name: modifierName, arguments: arguments))
+            }
+
         case "onTapGesture":
             if let handler = arguments.first {
                 effects.append(.interaction(event: "onTap", handler: handler))
@@ -85,4 +94,11 @@ public class ModifierLowerer {
         
         return effects
     }
+
+    /// SwiftUI Font.TextStyle -> @swiftuijs/ui `--sw-font-size-*` suffix.
+    private static let fontSizeTokens: [String: String] = [
+        "largeTitle": "large-title", "title": "title-1", "title2": "title-2", "title3": "title-3",
+        "headline": "headline", "body": "body", "callout": "callout", "subheadline": "subheadline",
+        "footnote": "footnote", "caption": "caption-1", "caption2": "caption-2",
+    ]
 }

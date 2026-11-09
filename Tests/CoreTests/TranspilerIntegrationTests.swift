@@ -43,4 +43,23 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertTrue(output.contains("// ⚠️ Unsupported runtime component: List"))
         XCTAssertTrue(output.contains("// ⚠️ Unsupported modifier: shadow"))
     }
+
+    func testFontTextStyleMapsToSwiftUIJSToken() {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    Text("Hi").font(.largeTitle)
+                }
+            }
+            """
+
+        let output = Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains(#"style={{ fontSize: "var(--sw-font-size-large-title)" }}"#), output)
+        XCTAssertFalse(output.contains("data-font"), output)
+        XCTAssertFalse(output.contains("Unsupported modifier: font"), output)
+    }
+
 }
