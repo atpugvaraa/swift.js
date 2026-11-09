@@ -27,6 +27,10 @@ struct Run: ParsableCommand {
             throw ValidationError("Not a swift.js project: no Package.swift in \(cwd.path)")
         }
 
+        // 2. Apple's compiler decides what is valid SwiftUI; only code it accepts is transpiled.
+        print("Type-checking Swift sources...")
+        try shell("swift build")
+
         // 3. Locate Runtime
         // User requested dist/ folder.
         let runtimeDir = cwd.appendingPathComponent("dist")
