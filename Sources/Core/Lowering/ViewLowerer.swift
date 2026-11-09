@@ -48,6 +48,8 @@ public class ViewLowerer {
                 switch componentName {
                 case "Text": propName = "content"
                 case "Button" where index == 0: propName = "title"
+                case "TextField" where index == 0, "SecureField" where index == 0: propName = "placeholder"
+                case "Toggle" where index == 0: propName = "label"
                 default: propName = "arg\(index)"
                 }
             }
@@ -57,6 +59,12 @@ public class ViewLowerer {
                !context.capabilityRegistry.supportsProperty(propName, on: componentName) {
                 let argument = arg.label.map { "argument '\($0.text):'" } ?? "unlabeled argument \(index + 1)"
                 context.addDiagnostic("not yet supported: \(componentName) \(argument)", at: arg)
+            }
+
+            // Two-way bindings: $state -> value + onChange calling the React setter
+            if Self.bindingProperty[componentName] == propName {
+                properties += lowerBinding(arg.expression, for: componentName)
+                continue
             }
 
             var value = exprLowerer.lower(arg.expression)
@@ -95,6 +103,10 @@ public class ViewLowerer {
             }
         }
         
+        if componentName == "Toggle" {
+            return lowerToggle(properties, callExpr: callExpr)
+        }
+
         return IRViewNode(
             componentName: componentName,
             properties: properties,
@@ -102,6 +114,61 @@ public class ViewLowerer {
             children: children,
             statements: statements
         )
+    }
+
+    /// The SwiftUI argument that takes a Binding, per component.
+    private static let bindingProperty = ["TextField": "text", "SecureField": "text", "Toggle": "isOn"]
+
+    /// `$name` of a @State variable -> swiftuijs value/onChange props. Other bindings are reported.
+    private func lowerBinding(_ expr: ExprSyntax, for component: String) -> [IRProperty] {
+        guard let ref = expr.as(DeclReferenceExprSyntax.self), ref.baseName.text.hasPrefix("$"),
+              let symbol = context.lookupVariable(String(ref.baseName.text.dropFirst())),
+              symbol.kind == .stateVariable else {
+            context.addDiagnostic("not yet supported: binding \(expr.trimmedDescription)", at: expr)
+            return []
+        }
+        let name = symbol.name
+        let setter = IRExpression.identifier("set" + name.prefix(1).uppercased() + name.dropFirst())
+
+        if component == "Toggle" {
+            // swiftuijs Toggle: onChange(value: boolean)
+            return [IRProperty(name: "isOn", value: .identifier(name)), IRProperty(name: "onChange", value: setter)]
+        }
+        // swiftuijs TextField/SecureField: onChange(event) -> setter(event.target.value)
+        let newValue = IRExpression.memberAccess(
+            base: .memberAccess(base: .identifier("e"), member: "target", kind: .instance),
+            member: "value", kind: .instance)
+        let handler = IRExpression.closure(IRClosureExpression(
+            parameters: [IRClosureParameter(name: "e")],
+            body: [.expression(.functionCall(callee: setter, arguments: [IRArgument(value: newValue)]))]))
+        return [IRProperty(name: "value", value: .identifier(name)), IRProperty(name: "onChange", value: handler)]
+    }
+
+    /// SwiftUI `Toggle("Label", isOn:)` shows the label leading and the switch trailing; swiftuijs
+    /// Toggle has no label, so emit HStack { Text(label) Spacer() Toggle(aria-label:) }.
+    private func lowerToggle(_ properties: [IRProperty], callExpr: FunctionCallExprSyntax) -> IRViewNode {
+        if let closure = callExpr.trailingClosure {
+            context.addDiagnostic("not yet supported: Toggle with a label closure", at: closure)
+        }
+        guard let label = properties.first(where: { $0.name == "label" })?.value else {
+            return IRViewNode(componentName: "Toggle", properties: properties, modifiers: [], children: [], statements: [])
+        }
+        for name in ["HStack", "Text", "Spacer"] { context.markComponentUsed(name) }
+        let toggle = IRViewNode(
+            componentName: "Toggle",
+            properties: [IRProperty(name: "aria-label", value: label)] + properties.filter { $0.name != "label" },
+            modifiers: [], children: [], statements: [])
+        return IRViewNode(
+            componentName: "HStack",
+            properties: [IRProperty(name: "alignment", value: .stringLiteral("center"))],
+            modifiers: [],
+            children: [
+                IRViewNode(componentName: "Text", properties: [IRProperty(name: "content", value: label)],
+                           modifiers: [], children: [], statements: []),
+                IRViewNode(componentName: "Spacer", properties: [], modifiers: [], children: [], statements: []),
+                toggle,
+            ],
+            statements: [])
     }
     
     private func lowerIRExpressionToView(_ expr: IRExpression) -> IRViewNode? {

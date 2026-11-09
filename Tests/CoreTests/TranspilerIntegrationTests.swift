@@ -210,4 +210,51 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: body with 2 statements"), "\(error)")
         }
     }
+
+    func testStateBindingsBecomeValueAndSetter() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var draft = ""
+                @State private var password = ""
+                @State private var showDone = true
+
+                var body: some View {
+                    VStack {
+                        TextField("New todo", text: $draft)
+                        SecureField("Password", text: $password)
+                        Toggle("Show completed", isOn: $showDone)
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            #"<TextField placeholder={"New todo"} value={draft} onChange={(e) => setDraft(e.target.value)} />"#,
+            #"<SecureField placeholder={"Password"} value={password} onChange={(e) => setPassword(e.target.value)} />"#,
+            "<Text>\n{\"Show completed\"}\n</Text>",
+            #"<Toggle aria-label={"Show completed"} isOn={showDone} onChange={setShowDone} />"#,
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+    }
+
+    func testBindingToNonStateIsReported() {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    TextField("Name", text: .constant("x"))
+                }
+            }
+            """
+
+        XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
+            XCTAssertTrue("\(error)".contains("Page.swift:5:33: error: not yet supported: binding .constant(\"x\")"), "\(error)")
+        }
+    }
 }

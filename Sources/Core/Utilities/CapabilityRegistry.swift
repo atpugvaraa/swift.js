@@ -126,6 +126,9 @@ public final class CapabilityRegistry {
             ("ZStack", ["alignment"]),
             ("Spacer", ["minLength"]),
             ("ScrollView", ["showsIndicators"]),
+            ("TextField", ["placeholder", "text"]),
+            ("SecureField", ["placeholder", "text"]),
+            ("Toggle", ["label", "isOn"]),
         ]
         for (name, properties) in components {
             registerComponent(RuntimeComponentCapability(name: name, supportedProperties: properties))

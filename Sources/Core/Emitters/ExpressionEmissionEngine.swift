@@ -111,7 +111,10 @@ public class ExpressionEmissionEngine {
             
         case .closure(let closure):
             let params = closure.parameters.map { $0.name }.joined(separator: ", ")
-            // Body emission needs a StatementEmitter — will be integrated later
+            // Single-expression arrow functions; lowering reports any other closure body.
+            if closure.body.count == 1, case .expression(let body) = closure.body[0] {
+                return "(\(params)) => \(emit(body, context: context.with(precedence: 0)))"
+            }
             return "(\(params)) => { /* body */ }"
             
         case .memberAccess(let base, let member, let kind):
