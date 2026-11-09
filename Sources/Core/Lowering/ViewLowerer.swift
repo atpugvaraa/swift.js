@@ -48,30 +48,31 @@ public class ViewLowerer {
                 switch componentName {
                 case "Text": propName = "content"
                 case "Button" where index == 0: propName = "title"
-                case "Image": propName = "name"
-                case "Label" where index == 0: propName = "title"
-                case "Toggle" where index == 0: propName = "label"
-                case "Stepper" where index == 0: propName = "label"
-                case "Picker" where index == 0: propName = "label"
-                case "DatePicker" where index == 0: propName = "label"
-                case "ColorPicker" where index == 0: propName = "label"
-                case "SecureField" where index == 0: propName = "placeholder"
-                case "NavigationLink" where index == 0: propName = "label"
                 default: propName = "arg\(index)"
                 }
             }
-                
-            // Validate property
-            if !context.capabilityRegistry.supportsProperty(propName, on: componentName) {
+
+            // Validate property (an unsupported view is already reported as a whole)
+            if !(isRuntimeView && !isSupported),
+               !context.capabilityRegistry.supportsProperty(propName, on: componentName) {
                 let argument = arg.label.map { "argument '\($0.text):'" } ?? "unlabeled argument \(index + 1)"
                 context.addDiagnostic("not yet supported: \(componentName) \(argument)", at: arg)
             }
 
-            let property = IRProperty(
-                name: propName,
-                value: exprLowerer.lower(arg.expression)
-            )
-            properties.append(property)
+            var value = exprLowerer.lower(arg.expression)
+            if propName == "alignment" {
+                // SwiftUI .topLeading -> @swiftuijs/ui "top-leading"
+                if let member = arg.expression.as(MemberAccessExprSyntax.self), member.base == nil,
+                   let alignment = Self.alignments[member.declName.baseName.text],
+                   // @swiftuijs/ui 0.1.4 ZStack (CSS grid) ignores horizontal alignment.
+                   !(componentName == "ZStack" && (alignment.contains("leading") || alignment.contains("trailing"))) {
+                    value = .stringLiteral(alignment)
+                } else {
+                    context.addDiagnostic(
+                        "not yet supported: alignment \(arg.expression.trimmedDescription)", at: arg.expression)
+                }
+            }
+            properties.append(IRProperty(name: propName, value: value))
         }
         
         var children: [IRViewNode] = []
@@ -144,6 +145,14 @@ public class ViewLowerer {
         return viewNode
     }
     
+    /// SwiftUI Alignment / HorizontalAlignment / VerticalAlignment -> @swiftuijs/ui EAlignment.
+    private static let alignments: [String: String] = [
+        "leading": "leading", "center": "center", "trailing": "trailing",
+        "top": "top", "bottom": "bottom",
+        "topLeading": "top-leading", "topTrailing": "top-trailing",
+        "bottomLeading": "bottom-leading", "bottomTrailing": "bottom-trailing",
+    ]
+
     private func extractComponentName(_ exprSyntax: ExprSyntaxProtocol) -> String? {
         if let ident = exprSyntax.as(DeclReferenceExprSyntax.self) {
             return ident.baseName.text

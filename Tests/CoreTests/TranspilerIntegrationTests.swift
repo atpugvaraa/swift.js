@@ -27,8 +27,9 @@ final class TranspilerIntegrationTests: XCTestCase {
 
             struct Page: View {
                 var body: some View {
-                    List {
+                    TabView {
                         Text("Hello").shadow(radius: 4)
+                        Image(systemName: "star")
                     }
                 }
             }
@@ -36,8 +37,10 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
             let message = "\(error)"
-            XCTAssertTrue(message.contains("Page.swift:5:9: error: not yet supported: view List"), message)
+            XCTAssertTrue(message.contains("Page.swift:5:9: error: not yet supported: view TabView"), message)
             XCTAssertTrue(message.contains("Page.swift:6:13: error: not yet supported: modifier .shadow"), message)
+            XCTAssertTrue(message.contains("Page.swift:7:13: error: not yet supported: view Image"), message)
+            XCTAssertFalse(message.contains("argument"), "unsupported views report once:\n\(message)")
         }
     }
 
@@ -118,5 +121,29 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         XCTAssertTrue(output.contains(#"<VStack alignment={"center"}>"#), output)
         XCTAssertTrue(output.contains(#"<HStack alignment={"top"}>"#), output)
+    }
+
+    func testAlignmentsMapToSwiftUIJSNames() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    VStack(alignment: .trailing) {
+                        ZStack(alignment: .bottom) { Text("A") }
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains(#"<VStack alignment={"trailing"}>"#), output)
+        XCTAssertTrue(output.contains(#"<ZStack alignment={"bottom"}>"#), output)
+
+        let unsupported = source.replacingOccurrences(of: ".bottom", with: ".topLeading")
+        XCTAssertThrowsError(try Transpiler().transpile(unsupported, fileName: "Page.swift")) { error in
+            XCTAssertTrue("\(error)".contains("Page.swift:6:31: error: not yet supported: alignment .topLeading"), "\(error)")
+        }
     }
 }

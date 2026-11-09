@@ -84,7 +84,7 @@ public final class CapabilityRegistry {
     /// Check if a specific property is supported on a component
     public func supportsProperty(_ property: String, on component: String) -> Bool {
         guard let cap = components[component] else { return false }
-        return cap.supportedProperties.isEmpty || cap.supportedProperties.contains(property)
+        return cap.supportedProperties.contains(property)
     }
     
     /// Check if a component supports children
@@ -114,116 +114,23 @@ public final class CapabilityRegistry {
     
     // MARK: - Default Registration
     
-    /// Register the default set of runtime capabilities
+    /// Register what swift.js can render with @swiftuijs/ui today. Only list a component or
+    /// property here once its whole path (lowering, emission, swiftuijs props) works;
+    /// anything else is reported as not yet supported.
     public func registerDefaults() {
-        registerComponent(RuntimeComponentCapability(
-            name: "Text",
-            supportedProperties: ["content"],
-            supportsChildren: false,
-            supportsEvents: false
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Button",
-            supportedProperties: ["title", "label", "action"],
-            supportsChildren: true,
-            supportsEvents: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "VStack",
-            supportedProperties: ["alignment", "spacing"],
-            supportsChildren: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "HStack",
-            supportedProperties: ["alignment", "spacing"],
-            supportsChildren: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "ZStack",
-            supportedProperties: ["alignment"],
-            supportsChildren: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "ScrollView",
-            supportedProperties: ["axis", "showsIndicators"],
-            supportsChildren: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Spacer",
-            supportedProperties: [],
-            supportsChildren: false
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Image",
-            supportedProperties: ["src", "systemName"],
-            supportsChildren: false
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "TextField",
-            supportedProperties: ["placeholder", "text"],
-            supportsChildren: false,
-            supportsBindings: true,
-            supportsEvents: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Toggle",
-            supportedProperties: ["isOn", "label"],
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Label",
-            supportedProperties: ["title", "systemImage"]
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Slider",
-            supportedProperties: ["value", "min", "max", "step", "onChange"],
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Stepper",
-            supportedProperties: ["value", "min", "max", "step", "onChange", "label"],
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "Picker",
-            supportedProperties: ["selection", "label", "options"],
-            supportsChildren: true,
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "DatePicker",
-            supportedProperties: ["selection", "label"],
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "ColorPicker",
-            supportedProperties: ["selection", "label"],
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "SecureField",
-            supportedProperties: ["text", "placeholder"],
-            supportsBindings: true,
-            supportsEvents: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "NavigationLink",
-            supportedProperties: ["href", "target", "replace", "destination", "label"],
-            supportsChildren: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "TabView",
-            supportedProperties: ["initialTab", "labels", "selection"],
-            supportsChildren: true,
-            supportsBindings: true
-        ))
-        registerComponent(RuntimeComponentCapability(
-            name: "NavigationStack",
-            supportedProperties: ["initialRoute"],
-            supportsChildren: true
-        ))
+        let components: [(String, [String])] = [
+            ("Text", ["content"]),
+            ("Button", ["title"]),
+            ("VStack", ["alignment", "spacing"]),
+            ("HStack", ["alignment", "spacing"]),
+            ("ZStack", ["alignment"]),
+            ("Spacer", ["minLength"]),
+            ("ScrollView", ["showsIndicators"]),
+        ]
+        for (name, properties) in components {
+            registerComponent(RuntimeComponentCapability(name: name, supportedProperties: properties))
+        }
 
-        
         // Register all supported modifiers
         for modifier in [
             "padding", "background", "opacity", "blendMode",
