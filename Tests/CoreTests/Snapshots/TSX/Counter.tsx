@@ -7,7 +7,7 @@ export const Counter = () => {
   const [count, setCount] = useState(0);
 
   return (
-    <VStack>
+    <VStack alignment={"center"}>
 <Text>
 {`Count is ${count}`}
 </Text>

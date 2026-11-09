@@ -62,4 +62,24 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertFalse(output.contains("Unsupported modifier: font"), output)
     }
 
+    func testStacksDefaultToCenterAlignmentLikeSwiftUI() {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    VStack {
+                        HStack(alignment: .top) {
+                            Text("A")
+                        }
+                    }
+                }
+            }
+            """
+
+        let output = Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains(#"<VStack alignment={"center"}>"#), output)
+        XCTAssertTrue(output.contains(#"<HStack alignment={"top"}>"#), output)
+    }
 }

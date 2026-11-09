@@ -7,7 +7,7 @@ export const ToggleView = () => {
   const [isOn, setIsOn] = useState(false);
 
   return (
-    <VStack>
+    <VStack alignment={"center"}>
 <Button onClick={() => {
     isOn.toggle();
 }}>

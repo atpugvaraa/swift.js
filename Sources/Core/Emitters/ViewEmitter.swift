@@ -29,6 +29,11 @@ public final class ViewEmitter {
                 attributes.append("\(property.name)={\(value)}")
             }
         }
+        // SwiftUI stacks centre their content by default; @swiftuijs/ui stacks don't.
+        if ["VStack", "HStack"].contains(view.componentName),
+           !view.properties.contains(where: { $0.name == "alignment" }) {
+            attributes.append("alignment={\"center\"}")
+        }
         
         // 2. Process Modifiers
         var styles: [IRModifierEffect] = []
