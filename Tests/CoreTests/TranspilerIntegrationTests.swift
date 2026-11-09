@@ -19,7 +19,7 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         XCTAssertTrue(output.contains("export default function Page()"))
         XCTAssertTrue(output.contains("<Text"))
-        XCTAssertTrue(output.contains("content"))
+        XCTAssertTrue(output.contains("<Text>\n{\"Hello\"}\n</Text>"))
     }
 
     func testTranspilerReportsUnsupportedCapabilitiesWithoutImportingThem() {
@@ -38,7 +38,7 @@ final class TranspilerIntegrationTests: XCTestCase {
         let transpiler = Transpiler()
         let output = transpiler.transpile(source)
 
-        XCTAssertTrue(output.contains("import { Text } from '@swiftjs/runtime';"))
+        XCTAssertTrue(output.contains("import { Text } from '@swiftuijs/ui';"))
         XCTAssertFalse(output.contains("import { List"))
         XCTAssertTrue(output.contains("// ⚠️ Unsupported runtime component: List"))
         XCTAssertTrue(output.contains("// ⚠️ Unsupported modifier: shadow"))

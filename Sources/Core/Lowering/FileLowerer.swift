@@ -58,8 +58,8 @@ public class FileLowerer {
         // 3. Post-process Imports: Replace generic 'SwiftUI' items with actual used components
         let used = Array(context.usedComponents).sorted()
         for i in 0..<imports.count {
-            if imports[i].module == "@swiftjs/runtime" {
-                imports[i] = IRImport(items: used, module: "@swiftjs/runtime")
+            if imports[i].module == "@swiftuijs/ui" {
+                imports[i] = IRImport(items: used, module: "@swiftuijs/ui")
             }
         }
 
@@ -90,7 +90,7 @@ public class FileLowerer {
         
         let mappedModule: String
         if moduleName == "SwiftUI" {
-            mappedModule = "@swiftjs/runtime"
+            mappedModule = "@swiftuijs/ui"
         } else {
             mappedModule = moduleName
         }

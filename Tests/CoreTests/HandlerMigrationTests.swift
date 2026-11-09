@@ -15,7 +15,7 @@ final class HandlerMigrationTests: XCTestCase {
         let result = handler.handle(node: call, props: [], context: Transpiler())
 
         XCTAssertTrue(result.output.contains("<Text"))
-        XCTAssertTrue(result.output.contains("content"))
+        XCTAssertTrue(result.output.contains("{\"Hello\"}"))
         XCTAssertFalse(result.traverseChildren)
     }
 }

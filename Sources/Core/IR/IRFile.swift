@@ -31,7 +31,7 @@ public class IRFile: BaseIRNode {
 /// An import statement in IR form
 public class IRImport: BaseIRNode {
     public let items: [String]              // ["VStack", "Button", "Text"]
-    public let module: String               // "@swiftjs/runtime"
+    public let module: String               // "@swiftuijs/ui"
     
     public init(
         items: [String],

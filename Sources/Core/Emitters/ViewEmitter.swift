@@ -17,11 +17,17 @@ public final class ViewEmitter {
     
     public func emit(_ view: IRViewNode) -> String {
         var attributes: [String] = []
-        
+        var bodyParts: [String] = []
+
         // 1. Process Properties (e.g., content, label)
         for property in view.properties {
             let value = exprEngine.emit(property.value, context: IRExpressionContext(isProperty: true))
-            attributes.append("\(property.name)={\(value)}")
+            // @swiftuijs/ui takes Text content and Button titles as JSX children.
+            if Self.isChildLabel(property.name, on: view.componentName) {
+                bodyParts.append("{\(value)}")
+            } else {
+                attributes.append("\(property.name)={\(value)}")
+            }
         }
         
         // 2. Process Modifiers
@@ -55,8 +61,7 @@ public final class ViewEmitter {
         
         // 4. Generate JSX
         let tag = view.componentName
-        
-        var bodyParts: [String] = []
+
         for child in view.children {
             bodyParts.append(emit(child))
         }
@@ -88,6 +93,10 @@ public final class ViewEmitter {
         return "<\(tag)\(attrStr)>\n\(bodyParts.joined(separator: "\n"))\n</\(tag)>"
     }
     
+    private static func isChildLabel(_ property: String, on component: String) -> Bool {
+        (component == "Text" && property == "content") || (component == "Button" && property == "title")
+    }
+
     private func mapEventToReact(_ event: String) -> String {
         switch event {
         case "onTap": return "onClick"
