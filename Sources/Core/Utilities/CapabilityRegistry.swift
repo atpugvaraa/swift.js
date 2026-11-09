@@ -131,15 +131,7 @@ public final class CapabilityRegistry {
             registerComponent(RuntimeComponentCapability(name: name, supportedProperties: properties))
         }
 
-        // Register all supported modifiers
-        for modifier in [
-            "padding", "background", "opacity", "blendMode",
-            "foregroundStyle", "font", "fontWeight",
-            "frame", "ignoresSafeArea",
-            "onTapGesture", "onHover",
-            "rotationEffect", "scaleEffect", "animation",
-            "cornerRadius", "foregroundColor", "backgroundColor"
-        ] {
+        for modifier in ModifierLowerer.supportedModifiers {
             registerModifier(modifier)
         }
     }

@@ -134,10 +134,27 @@ public class ViewLowerer {
             return nil
         }
         
+        // All modifiers become one style object, which matches SwiftUI only when they run in
+        // box order (padding, frame, background, cornerRadius) and set each property once.
+        var styledKeys: Set<String> = []
+        var lastRank = 0
         for i in stride(from: modifierStack.count - 1, through: 0, by: -1) {
             let modifierCall = modifierStack[i]
             
             if let modifier = modifierLowerer.lower(modifierCall) {
+                let keys = Set(modifier.effects.compactMap { effect -> String? in
+                    if case .style(let key, _) = effect { return key }
+                    return nil
+                })
+                let rank = Self.boxOrder[modifier.name] ?? lastRank
+                if rank < lastRank || !styledKeys.isDisjoint(with: keys) {
+                    let anchor = modifierCall.calledExpression.as(MemberAccessExprSyntax.self)?.period
+                    context.addDiagnostic(
+                        "not yet supported: .\(modifier.name) in this position (SwiftUI modifier order)",
+                        at: anchor.map(Syntax.init) ?? Syntax(modifierCall))
+                }
+                styledKeys.formUnion(keys)
+                lastRank = max(lastRank, rank)
                 viewNode.applyModifier(modifier)
             }
         }
@@ -145,6 +162,9 @@ public class ViewLowerer {
         return viewNode
     }
     
+    /// Order in which box modifiers flatten correctly onto one element.
+    private static let boxOrder: [String: Int] = ["padding": 1, "frame": 2, "background": 3, "cornerRadius": 4]
+
     /// SwiftUI Alignment / HorizontalAlignment / VerticalAlignment -> @swiftuijs/ui EAlignment.
     private static let alignments: [String: String] = [
         "leading": "leading", "center": "center", "trailing": "trailing",

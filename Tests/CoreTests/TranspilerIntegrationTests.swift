@@ -38,7 +38,7 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
             let message = "\(error)"
             XCTAssertTrue(message.contains("Page.swift:5:9: error: not yet supported: view TabView"), message)
-            XCTAssertTrue(message.contains("Page.swift:6:13: error: not yet supported: modifier .shadow"), message)
+            XCTAssertTrue(message.contains("Page.swift:6:26: error: not yet supported: modifier .shadow"), message)
             XCTAssertTrue(message.contains("Page.swift:7:13: error: not yet supported: view Image"), message)
             XCTAssertFalse(message.contains("argument"), "unsupported views report once:\n\(message)")
         }
@@ -76,7 +76,7 @@ final class TranspilerIntegrationTests: XCTestCase {
                 "Page.swift:3:1: error: not yet supported: top-level struct Todo",
                 "Page.swift:10:5: error: not yet supported: var doubled in View Page",
                 "Page.swift:14:13: error: not yet supported: if inside a view or expression",
-                "Page.swift:17:40: error: not yet supported: trailing closure on .onTapGesture",
+                "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
                 "Page.swift:21:5: error: not yet supported: func reset in View Page",
             ] {
                 XCTAssertTrue(message.contains(expected), "missing \(expected) in:\n\(message)")
@@ -144,6 +144,54 @@ final class TranspilerIntegrationTests: XCTestCase {
         let unsupported = source.replacingOccurrences(of: ".bottom", with: ".topLeading")
         XCTAssertThrowsError(try Transpiler().transpile(unsupported, fileName: "Page.swift")) { error in
             XCTAssertTrue("\(error)".contains("Page.swift:6:31: error: not yet supported: alignment .topLeading"), "\(error)")
+        }
+    }
+
+    func testModifiersMapToCSSAndRejectUnsupportedForms() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                var body: some View {
+                    Text("Hi")
+                        .bold()
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Color.blue)
+                        .cornerRadius(8)
+                        .opacity(0.5)
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "fontWeight: 700", #"color: "var(--sw-color-label-secondary)""#,
+            #"background: "var(--sw-color-blue)""#, #"width: "100%""#, "minHeight: 44", #"justifyContent: "center""#,
+            "borderRadius: 8", "opacity: 0.5",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let unsupported = """
+            import SwiftUI
+
+            struct Page: View {
+                let tint = Color.red
+                var body: some View {
+                    VStack {
+                        Text("Hi").padding(.horizontal).foregroundStyle(tint)
+                        Text("Order").background(.red).padding()
+                    }
+                }
+            }
+            """
+        XCTAssertThrowsError(try Transpiler().transpile(unsupported, fileName: "Page.swift")) { error in
+            let message = "\(error)"
+            XCTAssertTrue(message.contains("Page.swift:7:23: error: not yet supported: .padding(.horizontal)"), message)
+            XCTAssertTrue(message.contains("Page.swift:7:44: error: not yet supported: .foregroundStyle(tint)"), message)
+            XCTAssertTrue(message.contains("Page.swift:8:43: error: not yet supported: .padding in this position"), message)
         }
     }
 
