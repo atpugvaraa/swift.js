@@ -17,8 +17,12 @@ public final class FileEmitter {
     public func emit(_ file: IRFile) -> String {
         var sections: [String] = []
         
+        // SwiftUI views are interactive (handlers, state), so every generated module is a
+        // client component; a server component would reject event handler props.
         if file.components.contains(where: { !$0.stateVariables.isEmpty }) {
             sections.append("'use client';\nimport { useState } from 'react';")
+        } else {
+            sections.append("'use client';")
         }
         
         // Imports

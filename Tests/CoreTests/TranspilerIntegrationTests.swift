@@ -17,6 +17,7 @@ final class TranspilerIntegrationTests: XCTestCase {
         let output = try Transpiler().transpile(source)
 
         XCTAssertTrue(output.contains("export default function Page()"))
+        XCTAssertTrue(output.hasPrefix("'use client';"), output)  // even without @State
         XCTAssertTrue(output.contains("<Text"))
         XCTAssertTrue(output.contains("<Text>\n{\"Hello\"}\n</Text>"))
     }
