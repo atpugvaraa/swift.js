@@ -87,7 +87,9 @@ public class ViewLowerer {
                         "not yet supported: alignment \(arg.expression.trimmedDescription)", at: arg.expression)
                 }
             }
-            properties.append(IRProperty(name: propName, value: value))
+            // Button(action: { … }) -> onClick
+            let emittedName = componentName == "Button" && propName == "action" ? "onClick" : propName
+            properties.append(IRProperty(name: emittedName, value: value))
         }
         
         var children: [IRViewNode] = []
@@ -95,8 +97,9 @@ public class ViewLowerer {
 
         // Handle trailing closure
         if let trailingClosure = callExpr.trailingClosure, let stmtLowerer {
-            if componentName == "Button" {
-                // Button's closure is its action
+            let hasAction = callExpr.arguments.contains { $0.label?.text == "action" }
+            if componentName == "Button" && !hasAction {
+                // Button("Title") { action }: the closure is its action
                 statements = trailingClosure.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
             } else {
                 children = lowerViewContent(trailingClosure.statements, in: componentName)

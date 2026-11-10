@@ -367,67 +367,43 @@ public class ExpressionLowerer {
     }
 
     private func lowerClosure(_ closure: ClosureExprSyntax) -> IRExpression {
-        // Supported: `{ expr }` with no parameters (emitted as `() => expr`). Parameters need
-        // types for strict TypeScript, and longer bodies need block emission.
-        let usesShorthand = closure.tokens(viewMode: .sourceAccurate).contains {
-            if case .dollarIdentifier = $0.tokenKind { return true }
-            return false
-        }
-        let isSingleExpression = closure.statements.count == 1
-            && closure.statements.first.map {
-                ($0.item.as(ExpressionStmtSyntax.self)?.expression ?? $0.item.as(ExprSyntax.self)).map { !$0.is(IfExprSyntax.self) } ?? false
-            } ?? false
-        if closure.signature != nil || usesShorthand || !isSingleExpression {
-            context.addDiagnostic("not yet supported: closure expression", at: closure)
-        }
-        // Extract parameters
         var parameters: [IRClosureParameter] = []
-        
+
         if let signature = closure.signature {
-            if let paramClause = signature.parameterClause {
-                // Explicit parameter list: { (x: Int, y: Int) in ... }
-                if let paramList = paramClause.as(ClosureShorthandParameterListSyntax.self) {
-                    for param in paramList {
-                        parameters.append(IRClosureParameter(name: param.name.text))
-                    }
-                }
-                if let parameterClause = paramClause.as(ClosureParameterClauseSyntax.self) {
-                    for param in parameterClause.parameters {
-                        // Avoid .description by inspecting the TypeSyntax
-                        let typeName: String?
-                        if let type = param.type {
-                            typeName = lowerType(type)
-                        } else {
-                            typeName = nil
-                        }
-                        parameters.append(IRClosureParameter(name: param.firstName.text, type: typeName))
-                    }
-                }
+            if signature.capture != nil || signature.effectSpecifiers != nil {
+                context.addDiagnostic("not yet supported: closure capture list, async or throws", at: signature)
             }
-        }
-        
-        // Lower body statements
-        var bodyStatements: [IRStatement] = []
-        if let stmtLowerer = statementLowerer {
-            for stmt in closure.statements {
-                bodyStatements.append(stmtLowerer.lowerCodeBlockItem(stmt))
+            if let shorthand = signature.parameterClause?.as(ClosureShorthandParameterListSyntax.self) {
+                // { a, b in … }: types come from context
+                parameters = shorthand.map { IRClosureParameter(name: $0.name.text) }
+            } else if let clause = signature.parameterClause?.as(ClosureParameterClauseSyntax.self) {
+                // { (a: Int, b) in … }
+                for param in clause.parameters {
+                    var type: String?
+                    if let swiftType = param.type {
+                        type = FileLowerer.typeScriptType(swiftType)
+                        if type == nil {
+                            context.addDiagnostic("not yet supported: closure parameter \(param.trimmedDescription)", at: param)
+                        }
+                    }
+                    parameters.append(IRClosureParameter(name: (param.secondName ?? param.firstName).text, type: type))
+                }
             }
         } else {
-            // Fallback: lower as expression statements
-            for stmt in closure.statements {
-                if let exprStmt = stmt.item.as(ExpressionStmtSyntax.self) {
-                    bodyStatements.append(.expression(lower(exprStmt.expression)))
-                } else if let expr = stmt.item.as(ExprSyntax.self) {
-                    bodyStatements.append(.expression(lower(expr)))
-                }
+            // Anonymous $0, $1 … become arrow parameters up to the highest one used.
+            let highest = closure.statements.tokens(viewMode: .sourceAccurate).compactMap { token -> Int? in
+                guard case .dollarIdentifier(let name) = token.tokenKind else { return nil }
+                return Int(name.dropFirst())
+            }.max()
+            if let highest {
+                parameters = (0...highest).map { IRClosureParameter(name: "$\($0)") }
             }
         }
-        
-        let closureExpr = IRClosureExpression(
-            parameters: parameters,
-            body: bodyStatements
-        )
-        return .closure(closureExpr)
+
+        let body = closure.statements.map { item -> IRStatement in
+            statementLowerer?.lowerCodeBlockItem(item) ?? .expression(unsupported("closure body", at: item))
+        }
+        return .closure(IRClosureExpression(parameters: parameters, body: body))
     }
     
     // MARK: - Type Lowering

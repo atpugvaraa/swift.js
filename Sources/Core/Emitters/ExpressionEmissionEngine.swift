@@ -35,6 +35,9 @@ public class ExpressionEmissionEngine {
         ReactStyleEmitter(exprEngine: self)
     }()
     
+    /// Emits closure block bodies; set by FileEmitter once its StatementEmitter exists.
+    public weak var statementEmitter: StatementEmitter?
+
     public init() {}
     
     public func emit(_ expression: IRExpression, context: IRExpressionContext = IRExpressionContext()) -> String {
@@ -110,12 +113,17 @@ public class ExpressionEmissionEngine {
             return "\(calleeStr)(\(argsStr))"
             
         case .closure(let closure):
-            let params = closure.parameters.map { $0.name }.joined(separator: ", ")
-            // Single-expression arrow functions; lowering reports any other closure body.
+            // Untyped parameters are typed by TypeScript from context (prop types, array methods).
+            let params = closure.parameters.map { p in p.type.map { "\(p.name): \($0)" } ?? p.name }
+                .joined(separator: ", ")
             if closure.body.count == 1, case .expression(let body) = closure.body[0] {
-                return "(\(params)) => \(emit(body, context: context.with(precedence: 0)))"
+                let emitted = emit(body, context: context.with(precedence: 0))
+                // An object literal body must be parenthesised to not read as a block.
+                return "(\(params)) => " + (emitted.hasPrefix("{") ? "(\(emitted))" : emitted)
             }
-            return "(\(params)) => { /* body */ }"
+            guard let statementEmitter else { return "(\(params)) => {}" }
+            let body = closure.body.map { statementEmitter.emit($0) }.joined(separator: "\n")
+            return "(\(params)) => {\n\(body)\n}"
             
         case .memberAccess(let base, let member, let kind):
             let baseStr = emit(base, context: context.with(precedence: 18))

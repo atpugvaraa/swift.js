@@ -120,7 +120,7 @@ public final class CapabilityRegistry {
     public func registerDefaults() {
         let components: [(String, [String])] = [
             ("Text", ["content"]),
-            ("Button", ["title"]),
+            ("Button", ["title", "action"]),
             ("VStack", ["alignment", "spacing"]),
             ("HStack", ["alignment", "spacing"]),
             ("ZStack", ["alignment"]),

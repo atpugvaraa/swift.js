@@ -10,6 +10,7 @@ public final class FileEmitter {
     public init() {
         self.exprEngine = ExpressionEmissionEngine()
         self.statementEmitter = StatementEmitter(exprEngine: exprEngine, context: context)
+        self.exprEngine.statementEmitter = statementEmitter
         self.viewEmitter = ViewEmitter(exprEngine: exprEngine, statementEmitter: statementEmitter)
     }
     

@@ -492,4 +492,43 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: ForEach item with several views"), "\(error)")
         }
     }
+
+    func testClosuresEmitAsArrowFunctions() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 0
+
+                var body: some View {
+                    VStack {
+                        Button(action: {
+                            count += 1
+                            count *= 2
+                        }) {
+                            Text("Bump")
+                        }
+                        Row { count = 0 }
+                    }
+                }
+            }
+
+            struct Row: View {
+                let onReset: () -> Void
+                var body: some View { Button("Reset") { onReset() } }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "onClick={() => {",
+            "setCount(count + 1);",
+            "setCount(count * 2);",
+            "<Text>\n{\"Bump\"}\n</Text>",
+            "onReset={() => setCount(0)}",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+    }
 }
