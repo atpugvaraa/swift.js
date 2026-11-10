@@ -149,10 +149,13 @@ public class ExpressionLowerer {
                 return .view(viewNode)
             }
             
-            // 2. Other calls (methods, initializers, functions) have no JS mapping yet and
-            //    would be emitted verbatim, e.g. `isOn.toggle()` or `UUID()`.
-            context.addDiagnostic(
-                "not yet supported: call to \(funcCall.calledExpression.trimmedDescription)()", at: funcCall)
+            // 2. Calls to the View's own methods are emitted as-is. Other calls (methods,
+            //    initializers, functions) have no JS mapping yet, e.g. `isOn.toggle()` or `UUID()`.
+            let calleeName = funcCall.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text
+            if calleeName.map({ !context.viewMethods.contains($0) }) ?? true {
+                context.addDiagnostic(
+                    "not yet supported: call to \(funcCall.calledExpression.trimmedDescription)()", at: funcCall)
+            }
             let callee = lower(funcCall.calledExpression)
             let arguments = funcCall.arguments.map { arg -> IRArgument in
                 IRArgument(label: arg.label?.text, value: lower(arg.expression))

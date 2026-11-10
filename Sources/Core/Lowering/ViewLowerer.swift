@@ -96,8 +96,13 @@ public class ViewLowerer {
                     if case .expression(let expr) = irStmt, 
                        let childView = lowerIRExpressionToView(expr) {
                         children.append(childView)
+                    } else if componentName == "Button" {
+                        statements.append(irStmt)  // Button's closure is its action
                     } else {
-                        statements.append(irStmt)
+                        // A view builder closure only holds views; `if`, `let` etc. need dedicated lowering.
+                        let isIf = item.item.as(ExpressionStmtSyntax.self)?.expression.is(IfExprSyntax.self) ?? false
+                        let what = isIf ? "if" : "\(item.item.kind)"
+                        context.addDiagnostic("not yet supported: \(what) in \(componentName) content", at: item)
                     }
                 }
             }

@@ -74,9 +74,8 @@ final class TranspilerIntegrationTests: XCTestCase {
             let message = "\(error)"
             for expected in [
                 "Page.swift:3:1: error: not yet supported: top-level struct Todo",
-                "Page.swift:14:13: error: not yet supported: if inside a view or expression",
+                "Page.swift:14:13: error: not yet supported: if in VStack content",
                 "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
-                "Page.swift:21:5: error: not yet supported: func reset in View Page",
             ] {
                 XCTAssertTrue(message.contains(expected), "missing \(expected) in:\n\(message)")
             }
@@ -279,5 +278,66 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertTrue(output.contains("const doubled = count * 2;"), output)
         XCTAssertTrue(output.contains("const label = `Doubled: ${doubled}`;"), output)
         XCTAssertLessThan(output.range(of: "const label")!.lowerBound, output.range(of: "return (")!.lowerBound)
+    }
+
+    func testMethodsBecomeTypedFunctionsWithStateSetters() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 0
+                @State private var note = ""
+
+                var body: some View {
+                    Button("Add") { add(5, label: "five") }
+                }
+
+                func add(_ amount: Int, label: String) {
+                    if amount > 0 {
+                        count += amount
+                    } else {
+                        reset()
+                    }
+                    note = label
+                }
+
+                func reset() {
+                    count = 0
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "const add = (amount: number, label: string) => {",
+            "setCount(count + amount);",
+            "reset();",
+            "setNote(label);",
+            "const reset = () => {",
+            "add(5, \"five\");",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+    }
+
+    func testIfLetConditionIsReported() {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var name: String? = nil
+                var body: some View {
+                    Button("Go") { go() }
+                }
+                func go() {
+                    if let n = name { name = n + "!" }
+                }
+            }
+            """
+
+        XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
+            XCTAssertTrue("\(error)".contains("Page.swift:9:12: error: not yet supported: condition let n = name"), "\(error)")
+        }
     }
 }

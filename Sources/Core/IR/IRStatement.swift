@@ -27,6 +27,10 @@ public indirect enum IRStatement {
     case forLoop(variable: String, sequence: IRExpression, body: [IRStatement])
     case whileLoop(condition: IRExpression, body: [IRStatement])
     
+    // MARK: - Functions
+    /// A View method, emitted as `const name = (params) => { body };`
+    case functionDeclaration(name: String, parameters: [IRClosureParameter], body: [IRStatement])
+
     // MARK: - Return/Break/Continue
     case returnStatement(IRExpression?)
     case breakStatement

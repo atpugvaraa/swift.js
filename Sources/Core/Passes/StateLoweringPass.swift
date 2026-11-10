@@ -52,6 +52,12 @@ public class StateLoweringPass: CompilerPass {
                 thenBranch: thenBranch.map { lowerStateInStatement($0, stateVars: stateVars) },
                 elseBranch: elseBranch?.map { lowerStateInStatement($0, stateVars: stateVars) }
             )
+        case .functionDeclaration(let name, let parameters, let body):
+            return .functionDeclaration(
+                name: name, parameters: parameters,
+                body: body.map { lowerStateInStatement($0, stateVars: stateVars) })
+        case .returnStatement(let value?):
+            return .returnStatement(lowerStateInExpression(value, stateVars: stateVars))
         case .forLoop(let variable, let sequence, let body):
             return .forLoop(
                 variable: variable,

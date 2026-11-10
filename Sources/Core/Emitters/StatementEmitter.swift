@@ -46,6 +46,14 @@ public final class StatementEmitter {
             }
             return "\(context.linePrefix())return;"
             
+        case .functionDeclaration(let name, let parameters, let body):
+            let params = parameters.map { "\($0.name): \($0.type ?? "unknown")" }.joined(separator: ", ")
+            var result = "\(context.linePrefix())const \(name) = (\(params)) => {\n"
+            context.indent()
+            for statement in body { result += emit(statement) + "\n" }
+            context.outdent()
+            return result + "\(context.linePrefix())};"
+
         case .breakStatement:
             return "\(context.linePrefix())break;"
             

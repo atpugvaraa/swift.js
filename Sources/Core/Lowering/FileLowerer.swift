@@ -132,8 +132,16 @@ public class FileLowerer {
         var bodyNode: IRViewNode? = nil
         var stateVariables: [IRStateVariable] = []
         var declarations: [IRStatement] = []
+        // Methods may be called from anywhere in the struct, including before their declaration.
+        context.viewMethods = Set(structDecl.memberBlock.members.compactMap {
+            $0.decl.as(FunctionDeclSyntax.self)?.name.text
+        }.filter { $0 != "body" })
         
         for member in structDecl.memberBlock.members {
+            if let funcDecl = member.decl.as(FunctionDeclSyntax.self), funcDecl.name.text != "body" {
+                if let method = lowerMethod(funcDecl) { declarations.append(method) }
+                continue
+            }
             if let computed = lowerComputedProperty(member.decl) {
                 declarations.append(computed)
                 continue
@@ -226,6 +234,48 @@ public class FileLowerer {
             ?? item.item.as(ReturnStmtSyntax.self)?.expression
         guard let expr else { return nil }
         return .variableDeclaration(name: name, isLet: true, value: exprLowerer.lower(expr))
+    }
+
+    /// `func name(_ x: T) { … }` -> `const name = (x: T) => { … };`
+    private func lowerMethod(_ funcDecl: FunctionDeclSyntax) -> IRStatement? {
+        let signature = funcDecl.signature
+        guard funcDecl.genericParameterClause == nil, signature.effectSpecifiers == nil,
+              funcDecl.attributes.isEmpty, let body = funcDecl.body else {
+            context.addDiagnostic("not yet supported: func \(funcDecl.name.text) (generic, async, throws or attributes)", at: funcDecl)
+            return nil
+        }
+        var parameters: [IRClosureParameter] = []
+        for param in signature.parameterClause.parameters {
+            let name = (param.secondName ?? param.firstName).text
+            guard param.defaultValue == nil, param.ellipsis == nil, let type = Self.typeScriptType(param.type) else {
+                context.addDiagnostic("not yet supported: parameter \(param.trimmedDescription)", at: param)
+                return nil
+            }
+            parameters.append(IRClosureParameter(name: name, type: type))
+        }
+        let statements = body.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
+        return .functionDeclaration(name: funcDecl.name.text, parameters: parameters, body: statements)
+    }
+
+    /// Swift parameter types with a direct TypeScript equivalent.
+    static func typeScriptType(_ type: TypeSyntax) -> String? {
+        if let identifier = type.as(IdentifierTypeSyntax.self), identifier.genericArgumentClause == nil {
+            switch identifier.name.text {
+            case "String", "Character": return "string"
+            case "Int", "Double", "Float", "CGFloat": return "number"
+            case "Bool": return "boolean"
+            default: return nil
+            }
+        }
+        if let array = type.as(ArrayTypeSyntax.self) {
+            return typeScriptType(array.element).map { "\($0)[]" }
+        }
+        if let function = type.as(FunctionTypeSyntax.self), function.parameters.isEmpty,
+           function.effectSpecifiers == nil,
+           function.returnClause.type.as(IdentifierTypeSyntax.self)?.name.text == "Void" {
+            return "() => void"
+        }
+        return nil
     }
 
     /// View members the lowerer handles: `var body` and `@State var x = initial`.

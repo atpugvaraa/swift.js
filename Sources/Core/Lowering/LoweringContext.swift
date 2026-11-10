@@ -12,6 +12,9 @@ public class LoweringContext {
 
     /// File name used in diagnostic locations
     public var fileName = "input.swift"
+
+    /// Methods of the View being lowered; calls to them are emitted as-is
+    public var viewMethods: Set<String> = []
     
     /// The symbol table for tracking definitions across scopes
     public let symbolTable: SymbolTable

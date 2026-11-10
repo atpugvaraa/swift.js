@@ -16,6 +16,10 @@ public class StatementLowerer {
     
     public func lower(_ stmtSyntax: StmtSyntaxProtocol) -> IRStatement {
         if let exprStmt = stmtSyntax.as(ExpressionStmtSyntax.self) {
+            // `if` in statement position (e.g. a method body) is a JS if-statement
+            if let ifExpr = exprStmt.expression.as(IfExprSyntax.self) {
+                return lowerIfExpression(ifExpr)
+            }
             return .expression(exprLowerer.lower(exprStmt.expression))
         }
         
@@ -228,16 +232,9 @@ public class StatementLowerer {
         for condition in conditions {
             if let exprCondition = condition.condition.as(ExprSyntax.self) {
                 expressions.append(exprLowerer.lower(exprCondition))
-            } else if let optionalBinding = condition.condition.as(OptionalBindingConditionSyntax.self) {
-                // `let x = expr` or `var x = expr` — lower as non-nil check
-                if let initializer = optionalBinding.initializer {
-                    let value = exprLowerer.lower(initializer.value)
-                    expressions.append(.binary(
-                        lhs: value,
-                        op: .notEquals,
-                        rhs: .nilLiteral
-                    ))
-                }
+            } else {
+                // `if let x = …` would need x declared in the branch; patterns and availability too.
+                context.addDiagnostic("not yet supported: condition \(condition.condition.trimmedDescription)", at: condition)
             }
         }
         
