@@ -3,7 +3,7 @@ import Foundation
 /// The Next.js starter that hosts generated TSX, fetched from a pinned tag of swiftjs-templates.
 enum Template {
     static let repository = "https://github.com/atpugvaraa/swiftjs-templates"
-    static let tag = "v0.2.0"
+    static let tag = "v0.2.1"
 
     /// Fails with an actionable message when Bun is missing.
     static func requireBun() throws {
