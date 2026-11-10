@@ -15,6 +15,7 @@ public class StateLoweringPass: CompilerPass {
         let stateVarNames = Set(component.stateVariables.map { $0.name })
         if stateVarNames.isEmpty { return }
         
+        component.declarations = component.declarations.map { lowerStateInStatement($0, stateVars: stateVarNames) }
         if let body = component.body {
             lowerStateInView(body, stateVars: stateVarNames)
         }

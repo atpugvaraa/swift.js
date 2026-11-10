@@ -54,6 +54,11 @@ public final class FileEmitter {
             result += "\(context.linePrefix())const [\(stateVariable.name), \(setterName)] = useState(\(initialValue));\n"
         }
         
+        // Computed properties and methods
+        for declaration in component.declarations {
+            result += statementEmitter.emit(declaration) + "\n"
+        }
+
         // Component Body
         if let body = component.body {
             result += "\n\(context.linePrefix())return (\n"

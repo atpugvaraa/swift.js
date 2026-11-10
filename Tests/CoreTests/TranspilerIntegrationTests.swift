@@ -74,7 +74,6 @@ final class TranspilerIntegrationTests: XCTestCase {
             let message = "\(error)"
             for expected in [
                 "Page.swift:3:1: error: not yet supported: top-level struct Todo",
-                "Page.swift:10:5: error: not yet supported: var doubled in View Page",
                 "Page.swift:14:13: error: not yet supported: if inside a view or expression",
                 "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
                 "Page.swift:21:5: error: not yet supported: func reset in View Page",
@@ -256,5 +255,29 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
             XCTAssertTrue("\(error)".contains("Page.swift:5:33: error: not yet supported: binding .constant(\"x\")"), "\(error)")
         }
+    }
+
+    func testComputedPropertiesBecomeConstsBeforeReturn() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 2
+                var doubled: Int { count * 2 }
+                var label: String {
+                    return "Doubled: \\(doubled)"
+                }
+
+                var body: some View {
+                    Text(label)
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains("const doubled = count * 2;"), output)
+        XCTAssertTrue(output.contains("const label = `Doubled: ${doubled}`;"), output)
+        XCTAssertLessThan(output.range(of: "const label")!.lowerBound, output.range(of: "return (")!.lowerBound)
     }
 }

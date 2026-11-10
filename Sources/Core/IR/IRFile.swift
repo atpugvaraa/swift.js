@@ -52,16 +52,20 @@ public class IRComponent: BaseIRNode {
     public let stateVariables: [IRStateVariable]    // @State variables
     public let body: IRViewNode?                    // The view body
     public let isDefaultExport: Bool                // true for "Page" component
-    
+    /// Computed properties and methods, emitted inside the component before `return`
+    public var declarations: [IRStatement]
+
     public init(
         name: String,
         stateVariables: [IRStateVariable] = [],
         body: IRViewNode? = nil,
         isDefaultExport: Bool = false,
+        declarations: [IRStatement] = [],
         sourceLocation: SourceLocation? = nil
     ) {
         self.name = name
         self.stateVariables = stateVariables
+        self.declarations = declarations
         self.body = body
         self.isDefaultExport = isDefaultExport
         super.init(sourceLocation: sourceLocation)

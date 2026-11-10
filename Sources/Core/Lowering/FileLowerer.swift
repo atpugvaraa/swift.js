@@ -131,8 +131,13 @@ public class FileLowerer {
         
         var bodyNode: IRViewNode? = nil
         var stateVariables: [IRStateVariable] = []
+        var declarations: [IRStatement] = []
         
         for member in structDecl.memberBlock.members {
+            if let computed = lowerComputedProperty(member.decl) {
+                declarations.append(computed)
+                continue
+            }
             if !isSupportedViewMember(member.decl) {
                 context.addDiagnostic(
                     "not yet supported: \(declarationName(member.decl)) in View \(name)", at: member)
@@ -186,7 +191,8 @@ public class FileLowerer {
             name: name,
             stateVariables: stateVariables,
             body: bodyNode,
-            isDefaultExport: name == "Page" || structDecl.modifiers.contains { $0.name.text == "public" }
+            isDefaultExport: name == "Page" || structDecl.modifiers.contains { $0.name.text == "public" },
+            declarations: declarations
         )
     }
     
@@ -205,6 +211,21 @@ public class FileLowerer {
             return nil
         }
         return view
+    }
+
+    /// `var name: T { expr }` (or `{ return expr }`) -> `const name = expr;`, recomputed each
+    /// render like SwiftUI. Returns nil for anything else, including `body`.
+    private func lowerComputedProperty(_ decl: DeclSyntax) -> IRStatement? {
+        guard let varDecl = decl.as(VariableDeclSyntax.self), varDecl.attributes.isEmpty,
+              varDecl.bindings.count == 1, let binding = varDecl.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text, name != "body",
+              case .getter(let items)? = binding.accessorBlock?.accessors, items.count == 1,
+              let item = items.first else { return nil }
+        let expr = item.item.as(ExprSyntax.self)
+            ?? item.item.as(ExpressionStmtSyntax.self)?.expression
+            ?? item.item.as(ReturnStmtSyntax.self)?.expression
+        guard let expr else { return nil }
+        return .variableDeclaration(name: name, isLet: true, value: exprLowerer.lower(expr))
     }
 
     /// View members the lowerer handles: `var body` and `@State var x = initial`.
