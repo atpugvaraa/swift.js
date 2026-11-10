@@ -19,6 +19,10 @@ public final class ViewEmitter {
         if let conditional = view as? IRConditionalViewNode {
             return emitConditional(conditional)
         }
+        if let forEach = view as? IRForEachViewNode {
+            let data = exprEngine.emit(forEach.data, context: IRExpressionContext(precedence: 18))
+            return "{\(data).map((\(forEach.parameter)) => \(emitAsExpression(forEach.content)))}"
+        }
         var attributes: [String] = []
         var bodyParts: [String] = []
 

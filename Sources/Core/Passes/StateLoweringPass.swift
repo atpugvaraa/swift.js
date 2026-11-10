@@ -45,6 +45,11 @@ public class StateLoweringPass: CompilerPass {
             (conditional.thenViews + (conditional.elseViews ?? [])).forEach { lowerStateInView($0, stateVars: stateVars) }
         }
 
+        if let forEach = node as? IRForEachViewNode {
+            forEach.data = lowerStateInExpression(forEach.data, stateVars: stateVars)
+            lowerStateInView(forEach.content, stateVars: stateVars)
+        }
+
         // 5. Lower state in children
         for child in node.children {
             lowerStateInView(child, stateVars: stateVars)

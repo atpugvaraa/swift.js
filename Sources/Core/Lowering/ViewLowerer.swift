@@ -28,6 +28,9 @@ public class ViewLowerer {
         guard context.componentRegistry.isComponent(componentName) else {
             return nil
         }
+        if componentName == "ForEach" {
+            return lowerForEach(callExpr)
+        }
         // Validate runtime capabilities
         let isRuntimeView = context.componentRegistry.definition(for: componentName)?.kind == .runtimeView
         let isSupported = context.capabilityRegistry.supportsComponent(componentName)
@@ -127,6 +130,80 @@ public class ViewLowerer {
             context.addDiagnostic("not yet supported: \(item.item.kind) in \(container) content", at: item)
             return nil
         }
+    }
+
+    /// `ForEach(items)` (Identifiable: key `item.id`), `ForEach(items, id: \.self | \.name)`
+    /// or `ForEach(0..<n)`, with one view (or an `if` of single views) per item.
+    private func lowerForEach(_ callExpr: FunctionCallExprSyntax) -> IRViewNode? {
+        let args = Array(callExpr.arguments)
+        guard let first = args.first, first.label == nil, args.count <= 2,
+              let closure = callExpr.trailingClosure, callExpr.additionalTrailingClosures.isEmpty else {
+            context.addDiagnostic("not yet supported: ForEach form", at: callExpr)
+            return nil
+        }
+        guard let parameter = forEachParameter(closure) else {
+            context.addDiagnostic("not yet supported: ForEach closure without a named parameter", at: closure)
+            return nil
+        }
+
+        // Data and key
+        var data: IRExpression
+        var key: IRExpression = .memberAccess(base: .identifier(parameter), member: "id", kind: .instance)
+        if let range = first.expression.as(InfixOperatorExprSyntax.self),
+           range.operator.as(BinaryOperatorExprSyntax.self)?.operator.text == "..<",
+           range.leftOperand.as(IntegerLiteralExprSyntax.self)?.literal.text == "0" {
+            // 0..<n -> Array.from({ length: n }, (_, i) => i)
+            data = .functionCall(callee: .identifier("Array.from"), arguments: [
+                IRArgument(value: .dictionary([("length", exprLowerer.lower(range.rightOperand))])),
+                IRArgument(value: .closure(IRClosureExpression(
+                    parameters: [IRClosureParameter(name: "_"), IRClosureParameter(name: "i")],
+                    body: [.expression(.identifier("i"))]))),
+            ])
+            key = .identifier(parameter)
+        } else {
+            data = exprLowerer.lower(first.expression)
+        }
+        if args.count == 2 {
+            guard args[1].label?.text == "id", let keyPath = args[1].expression.as(KeyPathExprSyntax.self),
+                  keyPath.root == nil, keyPath.components.count == 1,
+                  let property = keyPath.components.first?.component.as(KeyPathPropertyComponentSyntax.self) else {
+                context.addDiagnostic("not yet supported: ForEach id \(args[1].trimmedDescription)", at: args[1])
+                return nil
+            }
+            let name = property.declName.baseName.text
+            key = name == "self" ? .identifier(parameter) : .memberAccess(base: .identifier(parameter), member: name, kind: .instance)
+        }
+
+        // One view per item, keyed for React
+        let views = lowerViewContent(closure.statements, in: "ForEach")
+        guard views.count == 1, let content = views.first, addKey(key, to: content) else {
+            context.addDiagnostic("not yet supported: ForEach item with several views", at: closure)
+            return nil
+        }
+        return IRForEachViewNode(data: data, parameter: parameter, content: content)
+    }
+
+    private func forEachParameter(_ closure: ClosureExprSyntax) -> String? {
+        guard let clause = closure.signature?.parameterClause else { return nil }
+        if let shorthand = clause.as(ClosureShorthandParameterListSyntax.self), shorthand.count == 1 {
+            return shorthand.first?.name.text
+        }
+        if let parameters = clause.as(ClosureParameterClauseSyntax.self), parameters.parameters.count == 1,
+           parameters.parameters.first?.type == nil {
+            return parameters.parameters.first?.firstName.text
+        }
+        return nil
+    }
+
+    /// Puts `key` on the element each item renders (on every branch of a conditional).
+    private func addKey(_ key: IRExpression, to view: IRViewNode) -> Bool {
+        if let conditional = view as? IRConditionalViewNode {
+            let branches = [conditional.thenViews] + (conditional.elseViews.map { [$0] } ?? [])
+            return branches.allSatisfy { $0.count <= 1 && $0.allSatisfy { addKey(key, to: $0) } }
+        }
+        if view is IRForEachViewNode { return false }
+        view.properties.insert(IRProperty(name: "key", value: key), at: 0)
+        return true
     }
 
     /// `if cond { A } else if other { B } else { C }` -> nested conditional view nodes.

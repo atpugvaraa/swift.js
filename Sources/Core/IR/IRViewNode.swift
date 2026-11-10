@@ -58,3 +58,17 @@ public final class IRConditionalViewNode: IRViewNode {
         super.init(componentName: "")
     }
 }
+
+/// `ForEach(data) { item in Content }` -> `{data.map((item) => <Content key={…} />)}`.
+public final class IRForEachViewNode: IRViewNode {
+    public var data: IRExpression
+    public let parameter: String
+    public let content: IRViewNode
+
+    public init(data: IRExpression, parameter: String, content: IRViewNode) {
+        self.data = data
+        self.parameter = parameter
+        self.content = content
+        super.init(componentName: "")
+    }
+}

@@ -452,4 +452,44 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
+
+    func testForEachBecomesKeyedMap() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var names: [String] = ["Ada", "Grace"]
+                @State private var showAll = true
+
+                var body: some View {
+                    VStack {
+                        ForEach(names, id: \\.self) { name in
+                            Text(name)
+                        }
+                        ForEach(0..<3) { i in
+                            if showAll {
+                                Text("Row \\(i)")
+                            }
+                        }
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "useState<string[]>([\"Ada\", \"Grace\"])",
+            "{names.map((name) => <Text key={name}>",
+            "{Array.from({ \"length\": 3 }, (_, i) => i).map((i) => showAll && <Text key={i}>",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+        XCTAssertFalse(output.contains("ForEach"), output)
+
+        let several = source.replacingOccurrences(of: "Text(name)", with: "Text(name)\n Text(name)")
+        XCTAssertThrowsError(try Transpiler().transpile(several)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: ForEach item with several views"), "\(error)")
+        }
+    }
 }
