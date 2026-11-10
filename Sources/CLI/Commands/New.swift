@@ -52,7 +52,7 @@ struct New: ParsableCommand {
                 name: "\(name)",
                 platforms: [.macOS(.v13)],
                 dependencies: [],
-                targets: [.executableTarget(name: "App", path: "Sources")]
+                targets: [.target(name: "App", path: "Sources")]
             )
             """
         try packageSwift.write(
