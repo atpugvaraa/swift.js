@@ -96,6 +96,8 @@ public enum IRBinaryOperator: String, CaseIterable {
     // Comparison
     case equals = "==="  // Swift == on values is strict equality
     case notEquals = "!=="
+    /// Loose `!= null`: true for both null and undefined (Swift's "not nil")
+    case notNil = "!="
     case lessThan = "<"
     case greaterThan = ">"
     case lessThanOrEqual = "<="
@@ -118,7 +120,7 @@ public enum IRBinaryOperator: String, CaseIterable {
         case .logicalOr: return 1
         case .logicalAnd: return 2
         case .nilCoalescing: return 3
-        case .equals, .notEquals: return 4
+        case .equals, .notEquals, .notNil: return 4
         case .lessThan, .greaterThan, .lessThanOrEqual, .greaterThanOrEqual: return 5
         case .closedRange, .halfOpenRange: return 6
         case .add, .subtract: return 7

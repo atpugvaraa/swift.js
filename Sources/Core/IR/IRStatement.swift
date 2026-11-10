@@ -31,6 +31,12 @@ public indirect enum IRStatement {
     /// A View method, emitted as `const name = (params) => { body };`
     case functionDeclaration(name: String, parameters: [IRClosureParameter], body: [IRStatement])
 
+    // MARK: - Grouping
+    /// `{ … }`: a scoped block (e.g. an `if let` with its binding)
+    case block([IRStatement])
+    /// Several statements emitted in place, sharing the enclosing scope (e.g. `guard let`)
+    case sequence([IRStatement])
+
     // MARK: - Models
     /// A model struct: a TypeScript type plus a memberwise-initializer function
     case model(name: String, fields: [IRModelField])

@@ -54,6 +54,16 @@ public final class StatementEmitter {
             context.outdent()
             return result + "\(context.linePrefix())};"
 
+        case .block(let statements):
+            var result = "\(context.linePrefix()){\n"
+            context.indent()
+            result += statements.map(emit).joined(separator: "\n")
+            context.outdent()
+            return result + "\n\(context.linePrefix())}"
+
+        case .sequence(let statements):
+            return statements.map(emit).joined(separator: "\n")
+
         case .model(let name, let fields):
             // export type Todo = { … }; export const Todo = (init: { … }): Todo => ({ defaults, ...init });
             let type = fields.map { "\($0.name): \($0.type)" }.joined(separator: "; ")

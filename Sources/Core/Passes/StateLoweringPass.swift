@@ -98,6 +98,12 @@ public class StateLoweringPass: CompilerPass {
             return .functionDeclaration(name: name, parameters: parameters, body: lowerBody(body, stateVars))
         case .returnStatement(let value?):
             return .returnStatement(lowerExpression(value, stateVars))
+        case .block(let statements):
+            return .block(statements.map { lowerStatement($0, stateVars) })
+        case .sequence(let statements):
+            return .sequence(statements.map { lowerStatement($0, stateVars) })
+        case .guardStatement(let condition, let body):
+            return .guardStatement(condition: lowerExpression(condition, stateVars), body: body.map { lowerStatement($0, stateVars) })
         case .forLoop(let variable, let sequence, let body):
             return .forLoop(variable: variable, sequence: lowerExpression(sequence, stateVars),
                             body: body.map { lowerStatement($0, stateVars) })
@@ -269,6 +275,11 @@ public class StateLoweringPass: CompilerPass {
         case .ifStatement(let condition, let thenBranch, let elseBranch):
             collect(condition, stateVars, reads: &reads, writes: &writes)
             (thenBranch + (elseBranch ?? [])).forEach { collect($0, stateVars, reads: &reads, writes: &writes) }
+        case .block(let statements), .sequence(let statements):
+            statements.forEach { collect($0, stateVars, reads: &reads, writes: &writes) }
+        case .guardStatement(let condition, let body):
+            collect(condition, stateVars, reads: &reads, writes: &writes)
+            body.forEach { collect($0, stateVars, reads: &reads, writes: &writes) }
         default:
             break
         }

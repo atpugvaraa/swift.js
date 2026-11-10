@@ -319,23 +319,46 @@ final class TranspilerIntegrationTests: XCTestCase {
         }
     }
 
-    func testIfLetConditionIsReported() {
+    func testOptionalBindingsDeclareAndCheck() throws {
         let source = """
             import SwiftUI
 
+            struct Item: Identifiable {
+                let id = UUID()
+                var done = false
+            }
+
             struct Page: View {
+                @State private var items: [Item] = []
                 @State private var name: String? = nil
+
                 var body: some View {
-                    Button("Go") { go() }
+                    Button("Go") { toggle(items.first) }
                 }
-                func go() {
-                    if let n = name { name = n + "!" }
+
+                func toggle(_ item: Item?) {
+                    guard let item else { return }
+                    if let index = items.firstIndex(where: { $0.id == item.id }) {
+                        items[index].done.toggle()
+                    }
+                    if let current = name, current.count > 2 {
+                        name = current + "!"
+                    }
                 }
             }
             """
 
-        XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
-            XCTAssertTrue("\(error)".contains("Page.swift:9:12: error: not yet supported: condition let n = name"), "\(error)")
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "if (!(item != null)) {",
+            "const index = items.findIndex(($0) => $0.id === item.id);",
+            "if (index !== -1) {",
+            "setItems((items) => items.map((_item, _index) => _index === index ? { ..._item, done: !_item.done } : _item));",
+            "const current = name;",
+            "if (current != null && current.length > 2) {",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
 

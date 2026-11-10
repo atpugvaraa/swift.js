@@ -113,8 +113,9 @@ public class StatementLowerer {
     // MARK: - If Statement
     
     private func lowerIfExpression(_ ifExpr: IfExprSyntax) -> IRStatement {
-        // Lower conditions
-        let condition = lowerConditionList(ifExpr.conditions)
+        // `if let x = …` declares x in a block around the if, like Swift's scoping
+        let binding = lowerBinding(in: ifExpr.conditions)
+        let condition = binding?.condition ?? lowerConditionList(ifExpr.conditions)
         
         // Lower then branch
         let thenBranch = lowerCodeBlock(ifExpr.body)
@@ -134,15 +135,60 @@ public class StatementLowerer {
             elseBranch = nil
         }
         
-        return .ifStatement(condition: condition, thenBranch: thenBranch, elseBranch: elseBranch)
+        let ifStatement = IRStatement.ifStatement(condition: condition, thenBranch: thenBranch, elseBranch: elseBranch)
+        if let declaration = binding?.declaration {
+            return .block([declaration, ifStatement])
+        }
+        return ifStatement
+    }
+
+    /// One optional binding (`let x = value` or `let x`) plus boolean conditions:
+    /// the declaration to emit first and the full check. nil when there is no binding.
+    /// `firstIndex(where:)` maps to findIndex, which signals "nil" with -1.
+    private func lowerBinding(in conditions: ConditionElementListSyntax)
+        -> (declaration: IRStatement?, condition: IRExpression)? {
+        let bindings = conditions.compactMap { $0.condition.as(OptionalBindingConditionSyntax.self) }
+        guard let binding = bindings.first else { return nil }
+        guard bindings.count == 1, let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
+            context.addDiagnostic("not yet supported: several optional bindings in one condition", at: conditions)
+            return nil
+        }
+
+        var declaration: IRStatement?
+        var check = IRExpression.binary(lhs: .identifier(name), op: .notNil, rhs: .nilLiteral)
+        if let value = binding.initializer?.value {
+            if let call = value.as(FunctionCallExprSyntax.self),
+               let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base,
+               member.declName.baseName.text == "firstIndex",
+               let predicate = call.trailingClosure.map(ExprSyntax.init)
+                ?? call.arguments.first(where: { $0.label?.text == "where" })?.expression {
+                let findIndex = IRExpression.functionCall(
+                    callee: .memberAccess(base: exprLowerer.lower(base), member: "findIndex", kind: .instance),
+                    arguments: [IRArgument(value: exprLowerer.lower(predicate))])
+                declaration = .variableDeclaration(name: name, isLet: true, value: findIndex)
+                check = .binary(lhs: .identifier(name), op: .notEquals, rhs: .numberLiteral(-1))
+            } else {
+                declaration = .variableDeclaration(name: name, isLet: true, value: exprLowerer.lower(value))
+            }
+        }
+
+        let others = conditions.filter { !$0.condition.is(OptionalBindingConditionSyntax.self) }
+        let rest = lowerConditionList(ConditionElementListSyntax(others))
+        if case .boolLiteral(true) = rest { return (declaration, check) }
+        return (declaration, .binary(lhs: check, op: .logicalAnd, rhs: rest))
     }
     
     // MARK: - Guard Statement
     
     private func lowerGuardStatement(_ guardStmt: GuardStmtSyntax) -> IRStatement {
-        let condition = lowerConditionList(guardStmt.conditions)
-        let body = lowerCodeBlock(guardStmt.body)
-        return .guardStatement(condition: condition, body: body)
+        // `guard let x = …` keeps x in scope after the guard, so no block
+        let binding = lowerBinding(in: guardStmt.conditions)
+        let condition = binding?.condition ?? lowerConditionList(guardStmt.conditions)
+        let guardStatement = IRStatement.guardStatement(condition: condition, body: lowerCodeBlock(guardStmt.body))
+        if let declaration = binding?.declaration {
+            return .sequence([declaration, guardStatement])
+        }
+        return guardStatement
     }
     
     // MARK: - Switch Statement
