@@ -149,9 +149,17 @@ public class ExpressionLowerer {
                 return .view(viewNode)
             }
             
+            if let mapped = lowerLibraryCall(funcCall) {
+                return mapped
+            }
+
             // 2. Calls to the View's own methods are emitted as-is. Other calls (methods,
             //    initializers, functions) have no JS mapping yet, e.g. `isOn.toggle()` or `UUID()`.
             let calleeName = funcCall.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text
+                ?? funcCall.calledExpression.as(MemberAccessExprSyntax.self).flatMap { member in
+                    member.base?.as(DeclReferenceExprSyntax.self)?.baseName.tokenKind == .keyword(.self)
+                        ? member.declName.baseName.text : nil
+                }
             let isViewMethod = calleeName.map { context.viewMethods.contains($0) } ?? false
             // Mutating methods on @State values are rewritten into setter calls by StateLoweringPass.
             let isStateMutation = funcCall.calledExpression.as(MemberAccessExprSyntax.self).map {
@@ -337,9 +345,25 @@ public class ExpressionLowerer {
             )
         }
         
+        // self.count -> count (component members are locals in a function component)
+        if base.as(DeclReferenceExprSyntax.self)?.baseName.tokenKind == .keyword(.self) {
+            return .identifier(memberName)
+        }
+
         let baseExpr = lower(base)
         let kind = inferMemberAccessKind(base: base, member: memberName)
-        
+
+        // Swift collection/String properties with a different name in JS
+        if kind == .instance || kind == .unknown {
+            let length = IRExpression.memberAccess(base: baseExpr, member: "length", kind: .instance)
+            switch memberName {
+            case "count": return length
+            case "isEmpty": return .binary(lhs: length, op: .equals, rhs: .numberLiteral(0))
+            case "first": return .subscript(base: baseExpr, index: .numberLiteral(0))
+            case "last": return .subscript(base: baseExpr, index: .binary(lhs: length, op: .subtract, rhs: .numberLiteral(1)))
+            default: break
+            }
+        }
         return .memberAccess(base: baseExpr, member: memberName, kind: kind)
     }
     
@@ -368,6 +392,75 @@ public class ExpressionLowerer {
     
     // MARK: - Closure Lowering
     
+    /// Swift standard library calls with a JS equivalent of the same meaning, or nil.
+    private func lowerLibraryCall(_ call: FunctionCallExprSyntax) -> IRExpression? {
+        // Match on syntax first; arguments are lowered only for a match, so a fallback
+        // lowering of the same call doesn't report their diagnostics twice.
+        var argumentSyntax = call.arguments.map { (label: $0.label?.text, expr: $0.expression) }
+        if let trailing = call.trailingClosure {
+            argumentSyntax.append((label: nil, expr: ExprSyntax(trailing)))
+        }
+        let labels = argumentSyntax.map(\.label)
+        let isClosureArgument = argumentSyntax.first?.expr.is(ClosureExprSyntax.self) ?? false
+        var lowered: [IRArgument]?
+        var values: [IRArgument] {
+            if lowered == nil { lowered = argumentSyntax.map { IRArgument(value: lower($0.expr)) } }
+            return lowered!
+        }
+
+        // Free functions and initializers
+        if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text {
+            switch (name, labels) {
+            case ("UUID", []):
+                return .functionCall(callee: .identifier("crypto.randomUUID"), arguments: [])
+            case ("String", [nil]):
+                return .functionCall(callee: .identifier("String"), arguments: values)
+            default:
+                return nil
+            }
+        }
+
+        guard let member = call.calledExpression.as(MemberAccessExprSyntax.self), let baseSyntax = member.base,
+              baseSyntax.as(DeclReferenceExprSyntax.self)?.baseName.tokenKind != .keyword(.self) else { return nil }
+        let method = { (name: String, args: [IRArgument]) in
+            IRExpression.functionCall(
+                callee: .memberAccess(base: self.lower(baseSyntax), member: name, kind: .instance), arguments: args)
+        }
+        switch (member.declName.baseName.text, labels) {
+        case ("filter", [nil]), ("map", [nil]), ("forEach", [nil]):
+            return method(member.declName.baseName.text, values)
+        case ("contains", [nil]) where !isClosureArgument:
+            return method("includes", values)
+        case ("contains", ["where"]), ("contains", [nil]):
+            return method("some", values)
+        case ("first", ["where"]), ("first", [nil]):
+            return method("find", values)
+        case ("allSatisfy", [nil]):
+            return method("every", values)
+        case ("reduce", [nil, nil]):
+            return method("reduce", [values[1], values[0]])  // JS takes (callback, initial)
+        case ("joined", []):
+            return method("join", [IRArgument(value: .stringLiteral(""))])
+        case ("joined", ["separator"]):
+            return method("join", values)
+        case ("reversed", []):
+            return .functionCall(callee: .memberAccess(base: method("slice", []), member: "reverse", kind: .instance), arguments: [])
+        case ("uppercased", []):
+            return method("toUpperCase", [])
+        case ("lowercased", []):
+            return method("toLowerCase", [])
+        case ("hasPrefix", [nil]):
+            return method("startsWith", values)
+        case ("hasSuffix", [nil]):
+            return method("endsWith", values)
+        case ("trimmingCharacters", ["in"]):
+            let set = call.arguments.first?.expression.as(MemberAccessExprSyntax.self)?.declName.baseName.text
+            return ["whitespaces", "whitespacesAndNewlines"].contains(set ?? "") ? method("trim", []) : nil
+        default:
+            return nil
+        }
+    }
+
     /// Swift mutating methods StateLoweringPass knows how to rewrite on @State values.
     static let mutatingMethods: Set<String> = ["toggle", "append", "insert", "remove", "removeAll"]
 

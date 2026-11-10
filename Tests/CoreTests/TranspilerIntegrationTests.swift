@@ -579,4 +579,51 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: reading count after changing it in the same action in Page"), "\(error)")
         }
     }
+
+    func testSwiftLibraryMembersMapToJavaScript() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var names: [String] = ["Ada", "Grace"]
+                @State private var draft = ""
+                @State private var id = UUID().uuidString
+
+                var total: Int { names.count }
+                var empty: Bool { names.isEmpty }
+                var long: [String] { names.filter { $0.count > 3 } }
+                var shout: String { names.map { $0.uppercased() }.joined(separator: ", ") }
+                var hasAda: Bool { names.contains("Ada") }
+                var hasShort: Bool { names.contains { $0.count < 4 } }
+                var firstG: String? { names.first(where: { $0.hasPrefix("G") }) }
+                var letters: Int { names.reduce(0) { $0 + $1.count } }
+                var canAdd: Bool { !draft.trimmingCharacters(in: .whitespaces).isEmpty }
+                var label: String { String(self.total) }
+
+                var body: some View { Text(label) }
+            }
+            """
+
+        let output = try Transpiler().transpile(source.replacingOccurrences(of: "UUID().uuidString", with: "\"\""))
+
+        for expected in [
+            "const total = names.length;",
+            "const empty = names.length === 0;",
+            "const long = names.filter(($0) => $0.length > 3);",
+            #"const shout = names.map(($0) => $0.toUpperCase()).join(", ");"#,
+            #"const hasAda = names.includes("Ada");"#,
+            "const hasShort = names.some(($0) => $0.length < 4);",
+            #"const firstG = names.find(($0) => $0.startsWith("G"));"#,
+            "const letters = names.reduce(($0, $1) => $0 + $1.length, 0);",
+            "const canAdd = !(draft.trim().length === 0);",
+            "const label = String(total);",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let index = source.replacingOccurrences(of: "names.first(where:", with: "names.firstIndex(where:")
+        XCTAssertThrowsError(try Transpiler().transpile(index)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: call to names.firstIndex()"), "\(error)")
+        }
+    }
 }
