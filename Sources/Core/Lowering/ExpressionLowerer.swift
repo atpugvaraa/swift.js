@@ -412,6 +412,7 @@ public class ExpressionLowerer {
         if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text {
             // Model memberwise init: Todo(title: x) -> Todo({ title: x })
             if context.modelTypes.contains(name), labels.allSatisfy({ $0 != nil }) {
+                context.use(name)
                 let fields = zip(argumentSyntax, values).map { ($0.label!, $1.value) }
                 return .functionCall(callee: .identifier(name),
                                      arguments: fields.isEmpty ? [] : [IRArgument(value: .dictionary(fields))])

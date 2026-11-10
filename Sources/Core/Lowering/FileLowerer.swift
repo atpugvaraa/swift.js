@@ -22,12 +22,29 @@ public class FileLowerer {
         self.viewLowerer.setStatementLowerer(stmtLowerer)
     }
     
-    public func lower(_ parsed: SourceFileSyntax, fileName: String = "input.swift") -> IRFile {
+    public func lower(_ parsed: SourceFileSyntax, fileName: String = "input.swift",
+                      project: ProjectSymbols = ProjectSymbols(), module: String = "") -> IRFile {
+        // Declarations from the module's other files: usable here, imported from their module
+        for (name, view) in project.views where view.module != module {
+            context.componentRegistry.register(ComponentDefinition(name: name, kind: .customView))
+            context.viewProps[name] = view.props
+            context.externalModules[name] = view.module
+        }
+        for (name, modelModule) in project.models where modelModule != module {
+            context.modelTypes.insert(name)
+            context.externalModules[name] = modelModule
+        }
         // Fold `a + b * c`, `x ? y : z` etc. into trees with Swift's real precedence. Unknown
         // (custom) operators stay unfolded and are reported during lowering.
         let sourceFileSyntax = OperatorTable.standardOperators
             .foldAll(parsed, errorHandler: { _ in }).as(SourceFileSyntax.self) ?? parsed
         context.fileName = fileName
+        // The route's page component: `Page`, or in a route file (another page such as
+        // about/Page.swift, which needs its own struct name) its first View.
+        let views = sourceFileSyntax.statements.compactMap { $0.item.as(StructDeclSyntax.self) }
+            .filter { context.componentRegistry.isComponent($0.name.text) || ProjectSymbols.isView($0) }
+            .map(\.name.text)
+        context.routeView = views.contains("Page") ? "Page" : (module.hasPrefix("@/app/") ? views.first : nil)
         context.locationConverter = SourceLocationConverter(fileName: fileName, tree: sourceFileSyntax)
 
         // 1. Pre-pass: Semantic Analysis
@@ -44,14 +61,15 @@ public class FileLowerer {
         // 2. Lowering Phase
         for statement in sourceFileSyntax.statements {
             if let importStmt = statement.item.as(ImportDeclSyntax.self) {
-                let irImport = lowerImport(importStmt)
-                imports.append(irImport)
-                context.addImport(irImport)
+                if let irImport = lowerImport(importStmt) {
+                    imports.append(irImport)
+                    context.addImport(irImport)
+                }
             }
         }
         
         // Model structs (non-View) first: Views may use them as types.
-        context.modelTypes = Set(sourceFileSyntax.statements.compactMap { statement -> String? in
+        context.modelTypes.formUnion(sourceFileSyntax.statements.compactMap { statement -> String? in
             guard let structDecl = statement.item.as(StructDeclSyntax.self),
                   !context.componentRegistry.isComponent(structDecl.name.text) else { return nil }
             return structDecl.name.text
@@ -62,7 +80,7 @@ public class FileLowerer {
             if let structDecl = statement.item.as(StructDeclSyntax.self),
                context.componentRegistry.isComponent(structDecl.name.text) {
                 context.viewProps[structDecl.name.text] = structDecl.memberBlock.members.compactMap { member in
-                    storedProp(member.decl).map { IRClosureParameter(name: $0.name, type: context.typeScriptType($0.type)) }
+                    Self.storedProp(member.decl).map { IRClosureParameter(name: $0.name, type: context.typeScriptType($0.type)) }
                 }
             }
         }
@@ -93,6 +111,11 @@ public class FileLowerer {
             }
         }
 
+        // Imports from the module's other files
+        let byModule = Dictionary(grouping: context.usedExternals, by: { context.externalModules[$0]! })
+        for (externalModule, names) in byModule.sorted(by: { $0.key < $1.key }) {
+            imports.append(IRImport(items: names.sorted(), module: externalModule))
+        }
         if !context.usedIcons.isEmpty {
             imports.append(IRImport(items: context.usedIcons.sorted(), module: "lucide-react"))
         }
@@ -121,18 +144,19 @@ public class FileLowerer {
         return file
     }
     
-    private func lowerImport(_ importDecl: ImportDeclSyntax) -> IRImport {
+    /// `import SwiftUI` -> @swiftuijs/ui (items filled in later). Foundation's types used here
+    /// (UUID, String …) map to JS built-ins, so it needs no import; other modules are reported.
+    private func lowerImport(_ importDecl: ImportDeclSyntax) -> IRImport? {
         let moduleName = importDecl.path.compactMap { $0.name.text }.joined(separator: ".")
-        
-        let mappedModule: String
-        if moduleName == "SwiftUI" {
-            mappedModule = "@swiftuijs/ui"
-        } else {
-            mappedModule = moduleName
+        switch moduleName {
+        case "SwiftUI":
+            return IRImport(items: [], module: "@swiftuijs/ui")
+        case "Foundation":
+            return nil
+        default:
+            context.addDiagnostic("not yet supported: import \(moduleName)", at: importDecl)
+            return nil
         }
-        
-        // Initial import, will be optimized in the post-process
-        return IRImport(items: [], module: mappedModule)
     }
     
     private func lowerFunctionAsComponent(_ funcDecl: FunctionDeclSyntax) -> IRComponent? {
@@ -180,7 +204,7 @@ public class FileLowerer {
                 declarations.append(computed)
                 continue
             }
-            if let prop = storedProp(member.decl) {
+            if let prop = Self.storedProp(member.decl) {
                 if context.typeScriptType(prop.type) == nil {
                     context.addDiagnostic("not yet supported: property \(prop.name): \(prop.type.trimmedDescription) in View \(name)", at: member)
                 }
@@ -246,7 +270,7 @@ public class FileLowerer {
             name: name,
             stateVariables: stateVariables,
             body: bodyNode,
-            isDefaultExport: name == "Page" || structDecl.modifiers.contains { $0.name.text == "public" },
+            isDefaultExport: name == context.routeView,
             declarations: declarations
         ).withProps(context.viewProps[name] ?? [])
     }
@@ -328,7 +352,7 @@ public class FileLowerer {
     }
 
     /// `let name: T` / `var name: T` without initializer or wrapper: a value the caller passes in.
-    private func storedProp(_ decl: DeclSyntax) -> (name: String, type: TypeSyntax)? {
+    static func storedProp(_ decl: DeclSyntax) -> (name: String, type: TypeSyntax)? {
         guard let varDecl = decl.as(VariableDeclSyntax.self), varDecl.attributes.isEmpty,
               varDecl.bindings.count == 1, let binding = varDecl.bindings.first,
               binding.initializer == nil, binding.accessorBlock == nil,

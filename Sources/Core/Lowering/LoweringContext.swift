@@ -19,6 +19,19 @@ public class LoweringContext {
     /// Props (stored properties set by the caller) of each View struct in the file, in order
     public var viewProps: [String: [IRClosureParameter]] = [:]
 
+    /// The View emitted as the file's default export (the Next.js page), if any
+    public var routeView: String?
+
+    /// Names declared in the module's other files -> the TypeScript module they're emitted to
+    public var externalModules: [String: String] = [:]
+    /// External names this file uses, to import
+    public private(set) var usedExternals: Set<String> = []
+
+    /// Records a use of a View or model name; names from other files get imported.
+    public func use(_ name: String) {
+        if externalModules[name] != nil { usedExternals.insert(name) }
+    }
+
     /// Lucide icon components used by Image(systemName:), imported from lucide-react
     public var usedIcons: Set<String> = []
 
@@ -32,7 +45,9 @@ public class LoweringContext {
             case "String", "Character", "UUID": return "string"
             case "Int", "Double", "Float", "CGFloat": return "number"
             case "Bool": return "boolean"
-            case let name where modelTypes.contains(name): return name
+            case let name where modelTypes.contains(name):
+                use(name)
+                return name
             default: return nil
             }
         }

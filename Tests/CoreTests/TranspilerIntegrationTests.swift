@@ -817,4 +817,53 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains(#"not yet supported: SF Symbol "atom" (no icon mapping yet)"#), "\(error)")
         }
     }
+
+    func testProjectFilesImportEachOther() throws {
+        let page = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var todos: [Todo] = []
+                var body: some View {
+                    VStack {
+                        ForEach(todos) { todo in
+                            TodoRow(todo: todo)
+                        }
+                        Button("Add") { todos.append(Todo(title: "x")) }
+                    }
+                }
+            }
+            """
+        let row = """
+            import SwiftUI
+
+            struct TodoRow: View {
+                let todo: Todo
+                var body: some View { Text(todo.title) }
+            }
+            """
+        let model = """
+            import Foundation
+
+            struct Todo: Identifiable {
+                let id = UUID()
+                var title: String
+            }
+            """
+
+        let results = Transpiler().transpile(project: [
+            TranspileInput(fileName: "Page.swift", source: page, module: "@/app/page"),
+            TranspileInput(fileName: "TodoRow.swift", source: row, module: "@/views/TodoRow"),
+            TranspileInput(fileName: "Todo.swift", source: model, module: "@/views/Todo"),
+        ])
+        let outputs = try results.map { try $0.get() }
+
+        XCTAssertTrue(outputs[0].contains("import { Todo } from '@/views/Todo';"), outputs[0])
+        XCTAssertTrue(outputs[0].contains("import { TodoRow } from '@/views/TodoRow';"), outputs[0])
+        XCTAssertTrue(outputs[0].contains("useState<Todo[]>([])"), outputs[0])
+        XCTAssertTrue(outputs[1].contains("import { Todo } from '@/views/Todo';"), outputs[1])
+        XCTAssertTrue(outputs[1].contains("export const TodoRow = ({ todo }: { todo: Todo }) => {"), outputs[1])
+        XCTAssertTrue(outputs[2].contains("export type Todo = { id: string; title: string };"), outputs[2])
+        XCTAssertFalse(outputs[2].contains("import {"), outputs[2])  // Foundation needs no import
+    }
 }

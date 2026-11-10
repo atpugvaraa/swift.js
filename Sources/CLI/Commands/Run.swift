@@ -41,51 +41,44 @@ struct Run: ParsableCommand {
             try Template.scaffold(into: runtimeDir)
         }
 
-        // 4. Traverse & Transpile (1:1 Mapping)
+        // 4. Transpile all Swift files of the module together.
+        //    A file ending in Page.swift is its folder's route (Swift needs unique file names):
+        //    App/Page.swift -> src/app/page.tsx (/), App/about/AboutPage.swift ->
+        //    src/app/about/page.tsx (/about). Other files (views, models) ->
+        //    src/views/<path>.tsx, imported where used as "@/views/<path>".
         print("Transpiling Sources...")
         let sourcesDir = cwd.appendingPathComponent("Sources")
+        var files: [(url: URL, target: String, input: TranspileInput)] = []
+        for case let fileURL as URL in fm.enumerator(at: sourcesDir, includingPropertiesForKeys: nil) ?? .init()
+        where fileURL.pathExtension == "swift" {
+            let relative = String(fileURL.path.dropFirst(sourcesDir.path.count + 1))  // App/Rows/Row.swift
+            let withinApp = relative.hasPrefix("App/") ? String(relative.dropFirst("App/".count)) : relative
+            let stem = String(withinApp.dropLast(".swift".count))
+            let target: String
+            let module: String
+            if fileURL.lastPathComponent.hasSuffix("Page.swift") {
+                // Lowercase: Next's App Router only treats page.tsx as a route
+                let folder = (withinApp as NSString).deletingLastPathComponent
+                target = "app/" + (folder.isEmpty ? "" : folder + "/") + "page.tsx"
+                module = "@/" + String(target.dropLast(".tsx".count))
+            } else {
+                target = "views/\(stem).tsx"
+                module = "@/views/\(stem)"
+            }
+            let source = try String(contentsOf: fileURL, encoding: .utf8)
+            files.append((fileURL, target, TranspileInput(fileName: fileURL.path, source: source, module: module)))
+        }
+
         var unsupported: [TranspileError] = []
-
-        if let enumerator = fm.enumerator(
-            at: sourcesDir, includingPropertiesForKeys: [.isDirectoryKey])
-        {
-            for case let fileURL as URL in enumerator {
-                if fileURL.pathExtension == "swift" {
-                    // Calculate relative path
-                    // Sources/App/Page.swift -> App/Page.swift
-                    let relativePath = fileURL.path.replacingOccurrences(
-                        of: sourcesDir.path + "/", with: "")
-
-                    // Map to Target
-                    // dist/src/ + app/Page.tsx
-                    var targetPath = relativePath
-                        .replacingOccurrences(of: ".swift", with: ".tsx")
-
-                    targetPath = targetPath.replacingOccurrences(
-                        of: "App/",
-                        with: "app/"
-                    )
-                    // Next's App Router only treats lowercase page.tsx as a route; on case-sensitive
-                    // file systems Page.tsx would be an ordinary module next to the starter page.
-                    if fileURL.lastPathComponent == "Page.swift" {
-                        targetPath = String(targetPath.dropLast("Page.tsx".count)) + "page.tsx"
-                    }
-                    let destURL = runtimeSrc.appendingPathComponent(targetPath)
-
-                    // Ensure directory exists
-                    try fm.createDirectory(
-                        at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-                    // Transpile
-                    print("   📄 \(relativePath) -> \(targetPath)")
-                    let swiftCode = try String(contentsOf: fileURL, encoding: .utf8)
-                    do {
-                        let tsxCode = try Transpiler().transpile(swiftCode, fileName: fileURL.path)
-                        try tsxCode.write(to: destURL, atomically: true, encoding: .utf8)
-                    } catch let error as TranspileError {
-                        unsupported.append(error)
-                    }
-                }
+        for (file, result) in zip(files, Transpiler().transpile(project: files.map(\.input))) {
+            print("   📄 \(file.url.lastPathComponent) -> src/\(file.target)")
+            switch result {
+            case .success(let tsx):
+                let destURL = runtimeSrc.appendingPathComponent(file.target)
+                try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try tsx.write(to: destURL, atomically: true, encoding: .utf8)
+            case .failure(let error):
+                unsupported.append(error)
             }
         }
 

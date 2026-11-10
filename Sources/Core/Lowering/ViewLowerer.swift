@@ -45,6 +45,7 @@ public class ViewLowerer {
         }
 
         if let props = context.viewProps[componentName] {
+            context.use(componentName)
             return lowerCustomViewCall(callExpr, componentName: componentName, props: props)
         }
 

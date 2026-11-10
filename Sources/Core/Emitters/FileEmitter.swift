@@ -26,7 +26,7 @@ public final class FileEmitter {
         }
         
         // Imports
-        for imp in file.imports {
+        for imp in file.imports where !imp.items.isEmpty {
             sections.append("import { \(imp.items.joined(separator: ", ")) } from '\(imp.module)';")
         }
         
