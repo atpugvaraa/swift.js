@@ -11,7 +11,7 @@ public class ModifierLowerer {
     public static let supportedModifiers: Set<String> = [
         "padding", "font", "bold", "fontWeight", "foregroundColor", "foregroundStyle",
         "background", "opacity", "cornerRadius", "frame",
-        "strikethrough", "underline", "italic", "disabled", "onTapGesture",
+        "strikethrough", "underline", "italic", "disabled", "onTapGesture", "navigationTitle",
     ]
 
     public init(context: LoweringContext, exprLowerer: ExpressionLowerer) {
@@ -51,6 +51,9 @@ public class ModifierLowerer {
         switch name {
         case "disabled" where args.count == 1 && args[0].label == nil && call.trailingClosure == nil:
             return [.attribute(name: "disabled", value: exprLowerer.lower(args[0].expression))]
+        case "navigationTitle" where args.count == 1 && args[0].label == nil:
+            // Moved onto the enclosing NavigationStack's StandardPage by ViewLowerer
+            return [.attribute(name: "navigationTitle", value: exprLowerer.lower(args[0].expression))]
         case "onTapGesture":
             // .onTapGesture { … } / .onTapGesture(perform: { … }); a single tap only
             let action = call.trailingClosure.map(ExprSyntax.init)

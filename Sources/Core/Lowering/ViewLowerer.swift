@@ -109,6 +109,15 @@ public class ViewLowerer {
         if componentName == "Toggle" {
             return lowerToggle(properties, callExpr: callExpr)
         }
+        if componentName == "NavigationStack" {
+            return lowerNavigationStack(children)
+        }
+        if componentName == "List" {
+            // SwiftUI's List takes all the width offered, even inside a leading-aligned stack
+            let fill = IRModifier(name: "frame", arguments: [])
+            fill.effects = [.style(key: "alignSelf", value: .stringLiteral("stretch"))]
+            return IRViewNode(componentName: "List", properties: properties, modifiers: [fill], children: children)
+        }
 
         return IRViewNode(
             componentName: componentName,
@@ -248,6 +257,28 @@ public class ViewLowerer {
             context.addDiagnostic("not yet supported: multiple trailing closures", at: callExpr.additionalTrailingClosures)
         }
         return IRViewNode(componentName: componentName, properties: properties, modifiers: [], children: [], statements: [])
+    }
+
+    /// NavigationStack { content.navigationTitle("T") } -> NavigationStack (full window height)
+    /// > StandardPage(navigationTitle: "T") > content, the swiftuijs page structure.
+    private func lowerNavigationStack(_ children: [IRViewNode]) -> IRViewNode {
+        var pageProperties = [IRProperty(name: "id", value: .stringLiteral("root"))]
+        for child in children {
+            for modifier in child.modifiers {
+                if let index = modifier.effects.firstIndex(where: {
+                    if case .attribute("navigationTitle", _) = $0 { return true }
+                    return false
+                }), case .attribute(_, let title) = modifier.effects[index] {
+                    modifier.effects.remove(at: index)
+                    pageProperties.append(IRProperty(name: "navigationTitle", value: title))
+                }
+            }
+        }
+        context.markComponentUsed("StandardPage")
+        let page = IRViewNode(componentName: "StandardPage", properties: pageProperties, children: children)
+        let fullHeight = IRModifier(name: "frame", arguments: [])
+        fullHeight.effects = [.style(key: "height", value: .stringLiteral("100dvh"))]
+        return IRViewNode(componentName: "NavigationStack", modifiers: [fullHeight], children: [page])
     }
 
     /// The SwiftUI argument that takes a Binding, per component.

@@ -743,4 +743,39 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: .disabled on VStack"), "\(error)")
         }
     }
+
+    func testNavigationStackAndListRows() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var items: [String] = ["A"]
+
+                var body: some View {
+                    NavigationStack {
+                        List {
+                            Text("Header")
+                            ForEach(items, id: \\.self) { item in
+                                Text(item)
+                            }
+                        }
+                        .navigationTitle("Items")
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            #"<NavigationStack style={{ height: "100dvh" }}>"#,
+            #"<StandardPage id={"root"} navigationTitle={"Items"}>"#,
+            #"<List style={{ alignSelf: "stretch" }}>"#,
+            #"{items.map((item) => (<div key={item} style={{ padding: "11px 16px""#,
+            "import { List, NavigationStack, StandardPage, Text } from '@swiftuijs/ui';",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+        XCTAssertFalse(output.contains("<List navigationTitle"), output)
+    }
 }

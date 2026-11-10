@@ -79,7 +79,7 @@ public final class ViewEmitter {
         let tag = view.componentName
 
         for child in view.children {
-            bodyParts.append(emit(child))
+            bodyParts.append(tag == "List" ? emitRow(child) : emit(child))
         }
         
         var actionStatements: [IRStatement] = []
@@ -111,6 +111,23 @@ public final class ViewEmitter {
         return "<div\(key) style={{ display: \"contents\" }} \(wrapperHandlers.joined(separator: " "))>\n\(element)\n</div>"
     }
     
+    /// A SwiftUI List row: padded, with a separator. ForEach items and if-branches become rows.
+    private func emitRow(_ view: IRViewNode) -> String {
+        let rowStyle = #"style={{ padding: "11px 16px", borderBottom: "0.5px solid var(--sw-color-separator)" }}"#
+        if let forEach = view as? IRForEachViewNode {
+            let data = exprEngine.emit(forEach.data, context: IRExpressionContext(precedence: 18))
+            let key = forEach.content.properties.first { $0.name == "key" }.map { exprEngine.emit($0.value) } ?? "undefined"
+            return "{\(data).map((\(forEach.parameter)) => (<div key={\(key)} \(rowStyle)>\n\(emit(forEach.content))\n</div>))}"
+        }
+        if let conditional = view as? IRConditionalViewNode {
+            let rows = { (views: [IRViewNode]) in "<>\n\(views.map(self.emitRow).joined(separator: "\n"))\n</>" }
+            let condition = exprEngine.emit(conditional.condition, context: IRExpressionContext(precedence: 3))
+            guard let elseViews = conditional.elseViews else { return "{\(condition) && \(rows(conditional.thenViews))}" }
+            return "{\(condition) ? \(rows(conditional.thenViews)) : \(rows(elseViews))}"
+        }
+        return "<div \(rowStyle)>\n\(emit(view))\n</div>"
+    }
+
     /// `{cond ? <A /> : <B />}`, or `{cond && <A />}` without else; several views use a fragment.
     private func emitConditional(_ node: IRConditionalViewNode) -> String {
         let condition = exprEngine.emit(node.condition, context: IRExpressionContext(precedence: 3))
