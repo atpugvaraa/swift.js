@@ -40,10 +40,14 @@ public final class FileEmitter {
     
     public func emit(_ component: IRComponent) -> String {
         var result = ""
+        // ({ title, onTap }: { title: string; onTap: () => void })
+        let params = component.props.isEmpty ? "" :
+            "{ \(component.props.map(\.name).joined(separator: ", ")) }: { "
+            + component.props.map { "\($0.name): \($0.type ?? "unknown")" }.joined(separator: "; ") + " }"
         if component.isDefaultExport {
-            result += "export default function \(component.name)() {\n"
+            result += "export default function \(component.name)(\(params)) {\n"
         } else {
-            result += "export const \(component.name) = () => {\n"
+            result += "export const \(component.name) = (\(params)) => {\n"
         }
         context.indent()
         

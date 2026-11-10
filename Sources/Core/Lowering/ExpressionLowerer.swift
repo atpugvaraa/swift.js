@@ -414,8 +414,19 @@ public class ExpressionLowerer {
     }
 
     private func lowerClosure(_ closure: ClosureExprSyntax) -> IRExpression {
-        // The emitter cannot output closure bodies yet; fail instead of emitting an empty function.
-        context.addDiagnostic("not yet supported: closure expression", at: closure)
+        // Supported: `{ expr }` with no parameters (emitted as `() => expr`). Parameters need
+        // types for strict TypeScript, and longer bodies need block emission.
+        let usesShorthand = closure.tokens(viewMode: .sourceAccurate).contains {
+            if case .dollarIdentifier = $0.tokenKind { return true }
+            return false
+        }
+        let isSingleExpression = closure.statements.count == 1
+            && closure.statements.first.map {
+                ($0.item.as(ExpressionStmtSyntax.self)?.expression ?? $0.item.as(ExprSyntax.self)).map { !$0.is(IfExprSyntax.self) } ?? false
+            } ?? false
+        if closure.signature != nil || usesShorthand || !isSingleExpression {
+            context.addDiagnostic("not yet supported: closure expression", at: closure)
+        }
         // Extract parameters
         var parameters: [IRClosureParameter] = []
         

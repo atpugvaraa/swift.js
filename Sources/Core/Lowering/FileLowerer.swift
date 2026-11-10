@@ -44,6 +44,16 @@ public class FileLowerer {
             }
         }
         
+        // Props of every View in the file, so call sites can be checked before the View is lowered.
+        for statement in sourceFileSyntax.statements {
+            if let structDecl = statement.item.as(StructDeclSyntax.self),
+               context.componentRegistry.isComponent(structDecl.name.text) {
+                context.viewProps[structDecl.name.text] = structDecl.memberBlock.members.compactMap { member in
+                    storedProp(member.decl).map { IRClosureParameter(name: $0.name, type: Self.typeScriptType($0.type)) }
+                }
+            }
+        }
+
         for statement in sourceFileSyntax.statements {
             if statement.item.is(ImportDeclSyntax.self) { continue }
             
@@ -136,6 +146,8 @@ public class FileLowerer {
         context.viewMethods = Set(structDecl.memberBlock.members.compactMap {
             $0.decl.as(FunctionDeclSyntax.self)?.name.text
         }.filter { $0 != "body" })
+        // Function-typed props (`let onTap: () -> Void`) are callable too.
+        context.viewMethods.formUnion((context.viewProps[name] ?? []).filter { $0.type == "() => void" }.map(\.name))
         
         for member in structDecl.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self), funcDecl.name.text != "body" {
@@ -144,6 +156,12 @@ public class FileLowerer {
             }
             if let computed = lowerComputedProperty(member.decl) {
                 declarations.append(computed)
+                continue
+            }
+            if let prop = storedProp(member.decl) {
+                if Self.typeScriptType(prop.type) == nil {
+                    context.addDiagnostic("not yet supported: property \(prop.name): \(prop.type.trimmedDescription) in View \(name)", at: member)
+                }
                 continue
             }
             if !isSupportedViewMember(member.decl) {
@@ -201,7 +219,7 @@ public class FileLowerer {
             body: bodyNode,
             isDefaultExport: name == "Page" || structDecl.modifiers.contains { $0.name.text == "public" },
             declarations: declarations
-        )
+        ).withProps(context.viewProps[name] ?? [])
     }
     
     /// Lowers a view body that is a single view expression. Several statements (an implicit
@@ -234,6 +252,16 @@ public class FileLowerer {
             ?? item.item.as(ReturnStmtSyntax.self)?.expression
         guard let expr else { return nil }
         return .variableDeclaration(name: name, isLet: true, value: exprLowerer.lower(expr))
+    }
+
+    /// `let name: T` / `var name: T` without initializer or wrapper: a value the caller passes in.
+    private func storedProp(_ decl: DeclSyntax) -> (name: String, type: TypeSyntax)? {
+        guard let varDecl = decl.as(VariableDeclSyntax.self), varDecl.attributes.isEmpty,
+              varDecl.bindings.count == 1, let binding = varDecl.bindings.first,
+              binding.initializer == nil, binding.accessorBlock == nil,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+              let type = binding.typeAnnotation?.type else { return nil }
+        return (name, type)
     }
 
     /// `func name(_ x: T) { … }` -> `const name = (x: T) => { … };`

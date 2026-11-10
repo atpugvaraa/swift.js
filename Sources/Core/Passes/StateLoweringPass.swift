@@ -34,7 +34,12 @@ public class StateLoweringPass: CompilerPass {
             }
         }
         
-        // 3. Lower state in children
+        // 3. Lower state in props (e.g. closures passed to a child View)
+        node.properties = node.properties.map {
+            IRProperty(name: $0.name, value: lowerStateInExpression($0.value, stateVars: stateVars))
+        }
+
+        // 4. Lower state in children
         for child in node.children {
             lowerStateInView(child, stateVars: stateVars)
         }

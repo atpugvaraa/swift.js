@@ -340,4 +340,47 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("Page.swift:9:12: error: not yet supported: condition let n = name"), "\(error)")
         }
     }
+
+    func testViewParametersBecomeTypedPropsWithCallSites() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var taps = 0
+
+                var body: some View {
+                    VStack {
+                        Row(title: "Taps", count: taps) { taps += 1 }
+                        Header()
+                    }
+                }
+            }
+
+            struct Row: View {
+                let title: String
+                var count: Int
+                let onTap: () -> Void
+
+                var body: some View {
+                    Button("\\(title): \\(count)") { onTap() }
+                }
+            }
+
+            struct Header: View {
+                var body: some View { Text("Header") }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            #"<Row title={"Taps"} count={taps} onTap={() => setTaps(taps + 1)} />"#,
+            "<Header />",
+            "export const Row = ({ title, count, onTap }: { title: string; count: number; onTap: () => void }) => {",
+            "onTap();",
+            "import { Button, Text, VStack } from '@swiftuijs/ui';",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+    }
 }

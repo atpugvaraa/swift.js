@@ -13,8 +13,11 @@ public class LoweringContext {
     /// File name used in diagnostic locations
     public var fileName = "input.swift"
 
-    /// Methods of the View being lowered; calls to them are emitted as-is
+    /// Methods and function props of the View being lowered; calls to them are emitted as-is
     public var viewMethods: Set<String> = []
+
+    /// Props (stored properties set by the caller) of each View struct in the file, in order
+    public var viewProps: [String: [IRClosureParameter]] = [:]
     
     /// The symbol table for tracking definitions across scopes
     public let symbolTable: SymbolTable

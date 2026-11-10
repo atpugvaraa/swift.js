@@ -34,8 +34,12 @@ public class ViewLowerer {
         
         if isRuntimeView && !isSupported {
             context.addDiagnostic("not yet supported: view \(componentName)", at: callExpr)
-        } else {
-            context.markComponentUsed(componentName)
+        } else if isRuntimeView {
+            context.markComponentUsed(componentName)  // imported from @swiftuijs/ui
+        }
+
+        if let props = context.viewProps[componentName] {
+            return lowerCustomViewCall(callExpr, componentName: componentName, props: props)
         }
 
         var properties: [IRProperty] = []
@@ -119,6 +123,33 @@ public class ViewLowerer {
             children: children,
             statements: statements
         )
+    }
+
+    /// `Row(title: "x") { action() }` for a View declared in this file. Labels must name its
+    /// props (Swift's memberwise init); a trailing closure fills the last function-typed prop.
+    private func lowerCustomViewCall(_ callExpr: FunctionCallExprSyntax, componentName: String,
+                                     props: [IRClosureParameter]) -> IRViewNode {
+        var remaining = props
+        var properties: [IRProperty] = []
+        for arg in callExpr.arguments {
+            guard let label = arg.label?.text, let index = remaining.firstIndex(where: { $0.name == label }) else {
+                context.addDiagnostic("not yet supported: \(componentName) argument \(arg.trimmedDescription)", at: arg)
+                continue
+            }
+            properties.append(IRProperty(name: label, value: exprLowerer.lower(arg.expression)))
+            remaining.remove(at: index)
+        }
+        if let closure = callExpr.trailingClosure {
+            if let prop = remaining.last(where: { $0.type == "() => void" }) {
+                properties.append(IRProperty(name: prop.name, value: exprLowerer.lower(ExprSyntax(closure))))
+            } else {
+                context.addDiagnostic("not yet supported: trailing closure for \(componentName)", at: closure)
+            }
+        }
+        if !callExpr.additionalTrailingClosures.isEmpty {
+            context.addDiagnostic("not yet supported: multiple trailing closures", at: callExpr.additionalTrailingClosures)
+        }
+        return IRViewNode(componentName: componentName, properties: properties, modifiers: [], children: [], statements: [])
     }
 
     /// The SwiftUI argument that takes a Binding, per component.

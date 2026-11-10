@@ -54,6 +54,8 @@ public class IRComponent: BaseIRNode {
     public let isDefaultExport: Bool                // true for "Page" component
     /// Computed properties and methods, emitted inside the component before `return`
     public var declarations: [IRStatement]
+    /// Stored properties set by the caller (`let title: String`), emitted as typed React props
+    public var props: [IRClosureParameter] = []
 
     public init(
         name: String,
@@ -97,5 +99,13 @@ public class IRStateVariable: BaseIRNode {
             self.inferredType = IRType.infer(from: initialValue)
         }
         super.init(sourceLocation: sourceLocation)
+    }
+}
+
+extension IRComponent {
+    /// Sets the component's props and returns it, for building in one expression.
+    func withProps(_ props: [IRClosureParameter]) -> IRComponent {
+        self.props = props
+        return self
     }
 }

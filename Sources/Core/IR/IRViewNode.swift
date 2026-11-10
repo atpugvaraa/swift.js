@@ -11,7 +11,7 @@ import Foundation
 /// Represents views like Text, Button, VStack, etc. with their properties, modifiers, and children
 public class IRViewNode: BaseIRNode {
     public let componentName: String           // "Text", "Button", "VStack"
-    public let properties: [IRProperty]        // Named props (e.g., content, label)
+    public var properties: [IRProperty]        // Named props (e.g., content, label)
     public var modifiers: [IRModifier]         // Applied modifiers (can be mutated)
     public let children: [IRViewNode]          // Child views in composition
     public var statements: [IRStatement] = []  // Closure statements (e.g., Button action)
