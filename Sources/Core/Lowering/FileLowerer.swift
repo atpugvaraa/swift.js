@@ -1,5 +1,6 @@
 import Foundation
 import SwiftSyntax
+import SwiftOperators
 
 /// Top-level entry point for lowering entire Swift files to IR
 public class FileLowerer {
@@ -21,7 +22,11 @@ public class FileLowerer {
         self.viewLowerer.setStatementLowerer(stmtLowerer)
     }
     
-    public func lower(_ sourceFileSyntax: SourceFileSyntax, fileName: String = "input.swift") -> IRFile {
+    public func lower(_ parsed: SourceFileSyntax, fileName: String = "input.swift") -> IRFile {
+        // Fold `a + b * c`, `x ? y : z` etc. into trees with Swift's real precedence. Unknown
+        // (custom) operators stay unfolded and are reported during lowering.
+        let sourceFileSyntax = OperatorTable.standardOperators
+            .foldAll(parsed, errorHandler: { _ in }).as(SourceFileSyntax.self) ?? parsed
         context.fileName = fileName
         context.locationConverter = SourceLocationConverter(fileName: fileName, tree: sourceFileSyntax)
 

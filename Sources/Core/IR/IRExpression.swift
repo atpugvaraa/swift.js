@@ -92,8 +92,8 @@ public enum IRBinaryOperator: String, CaseIterable {
     case modulo = "%"
     
     // Comparison
-    case equals = "=="
-    case notEquals = "!="
+    case equals = "==="  // Swift == on values is strict equality
+    case notEquals = "!=="
     case lessThan = "<"
     case greaterThan = ">"
     case lessThanOrEqual = "<="

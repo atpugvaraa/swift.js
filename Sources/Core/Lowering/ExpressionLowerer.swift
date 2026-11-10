@@ -273,7 +273,9 @@ public class ExpressionLowerer {
             }
             
             // Regular binary operator
-            let op = IRBinaryOperator.from(opText)
+            guard let op = IRBinaryOperator.from(opText) else {
+                return unsupported("operator \(opText)", at: infix)
+            }
             return .binary(lhs: lhs, op: op, rhs: rhs)
         }
         
@@ -284,59 +286,8 @@ public class ExpressionLowerer {
     // MARK: - Sequence Expression Lowering
     
     private func lowerSequenceExpression(_ seq: SequenceExprSyntax) -> IRExpression {
-        let elements = Array(seq.elements)
-        
-        // Single element
-        if elements.count == 1 {
-            return lower(elements[0])
-        }
-        
-        // Three elements: lhs op rhs
-        if elements.count == 3 {
-            let lhs = lower(elements[0])
-            let rhs = lower(elements[2])
-            
-            // Assignment
-            if elements[1].is(AssignmentExprSyntax.self) {
-                return .assignment(target: lhs, value: rhs)
-            }
-            
-            // Binary/augmented operator
-            if let opExpr = elements[1].as(BinaryOperatorExprSyntax.self) {
-                let opText = opExpr.operator.text
-                if let augOp = IRAugmentedAssignmentOperator.from(opText) {
-                    return .augmentedAssignment(target: lhs, op: augOp, value: rhs)
-                }
-                return .binary(lhs: lhs, op: IRBinaryOperator.from(opText), rhs: rhs)
-            }
-            
-            // Ternary
-            if elements[1].is(UnresolvedTernaryExprSyntax.self) {
-                // elements[0] = condition, elements[1] = ? then :, elements[2] = else
-                // Swift syntax represents ternary differently; this is a simplification
-                return unsupported("ternary ?: expression", at: seq)
-            }
-        }
-        
-        // For longer sequences, fold left-to-right (simplified)
-        if elements.count >= 3 {
-            var result = lower(elements[0])
-            var i = 1
-            while i + 1 < elements.count {
-                let opElement = elements[i]
-                let rhsElement = elements[i + 1]
-                let rhs = lower(rhsElement)
-                
-                if let opExpr = opElement.as(BinaryOperatorExprSyntax.self) {
-                    let opText = opExpr.operator.text
-                    result = .binary(lhs: result, op: IRBinaryOperator.from(opText), rhs: rhs)
-                }
-                i += 2
-            }
-            return result
-        }
-        
-        return unsupported("expression of \(elements.count) parts", at: seq)
+        // Operator folding left this unfolded, so it uses an operator outside Swift's standard set.
+        return unsupported("expression with a custom operator", at: seq)
     }
     
     // MARK: - Prefix Operator Lowering
@@ -344,7 +295,9 @@ public class ExpressionLowerer {
     private func lowerPrefixOperator(_ prefix: PrefixOperatorExprSyntax) -> IRExpression {
         let operand = lower(prefix.expression)
         let opText = prefix.operator.text
-        let op = IRUnaryOperator.from(opText)
+        guard let op = IRUnaryOperator.from(opText) else {
+            return unsupported("prefix operator \(opText)", at: prefix)
+        }
         return .unary(op: op, expr: operand)
     }
     
@@ -515,7 +468,8 @@ public class ExpressionLowerer {
 // MARK: - Operator Factory Extensions
 
 extension IRBinaryOperator {
-    static func from(_ text: String) -> IRBinaryOperator {
+    /// Operators with the same meaning in JS; nil for ranges and anything else.
+    static func from(_ text: String) -> IRBinaryOperator? {
         switch text {
         case "+": return .add
         case "-": return .subtract
@@ -531,21 +485,19 @@ extension IRBinaryOperator {
         case "&&": return .logicalAnd
         case "||": return .logicalOr
         case "??": return .nilCoalescing
-        case "...": return .closedRange
-        case "..<": return .halfOpenRange
-        default: return .add
+        default: return nil
         }
     }
 }
 
 extension IRUnaryOperator {
-    static func from(_ text: String) -> IRUnaryOperator {
+    static func from(_ text: String) -> IRUnaryOperator? {
         switch text {
         case "!": return .not
         case "-": return .negate
         case "+": return .plus
         case "~": return .bitwiseNot
-        default: return .not
+        default: return nil
         }
     }
 }

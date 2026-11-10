@@ -383,4 +383,37 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
+
+    func testOperatorsFoldWithSwiftPrecedence() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var a = 1
+                var sum: Int { a + 2 * 3 }
+                var grouped: Int { (a + 2) * 3 }
+                var label: String { a == 1 ? "one" : "many" }
+
+                var body: some View {
+                    Text(a > 0 && a != 2 ? "yes" : "no")
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "const sum = a + 2 * 3;",
+            "const grouped = (a + 2) * 3;",
+            #"const label = a === 1 ? "one" : "many";"#,
+            #"{(a > 0 && a !== 2) ? "yes" : "no"}"#,
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let range = source.replacingOccurrences(of: "var sum: Int { a + 2 * 3 }", with: "var r: ClosedRange<Int> { 0...a }")
+        XCTAssertThrowsError(try Transpiler().transpile(range)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: operator ..."), "\(error)")
+        }
+    }
 }
