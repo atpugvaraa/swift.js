@@ -626,4 +626,21 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: call to names.firstIndex()"), "\(error)")
         }
     }
+
+    func testStringLiteralsInsideInterpolationKeepQuotes() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var done = false
+                var body: some View {
+                    Text("Status: \\(done ? "read" : "unread")")
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains(#"{`Status: ${done ? "read" : "unread"}`}"#), output)
+    }
 }

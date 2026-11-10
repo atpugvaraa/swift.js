@@ -106,7 +106,8 @@ public class ExpressionEmissionEngine {
             let emitted = parts.map { part -> String in
                 switch part {
                 case .literal(let text): return text
-                case .expression(let expr): return "${" + emit(expr, context: context.with(inTemplateLiteral: true)) + "}"
+                // Inside ${…} is ordinary JS again: nested string literals keep their quotes.
+                case .expression(let expr): return "${" + emit(expr, context: context.with(inTemplateLiteral: false).with(precedence: 0)) + "}"
                 }
             }.joined()
             return "`\(emitted)`"
