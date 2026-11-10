@@ -866,4 +866,48 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertTrue(outputs[2].contains("export type Todo = { id: string; title: string };"), outputs[2])
         XCTAssertFalse(outputs[2].contains("import {"), outputs[2])  // Foundation needs no import
     }
+
+    func testIntegerDivisionTruncatesLikeSwift() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 7
+                @State private var price: Double = 7
+                @State private var items: [String] = []
+
+                var half: Int { count / 2 }
+                var halfPrice: Double { price / 2 }
+                var literal: Int { 7 / 2 }
+                var ratio: Double { 7.0 / 2 }
+                var perItem: Int { 10 / items.count }
+
+                var body: some View {
+                    Button("Halve") { count /= 2 }
+                }
+
+                func split(_ total: Int) -> Int { return total / 3 }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "const half = Math.trunc(count / 2);",
+            "const halfPrice = price / 2;",
+            "const literal = Math.trunc(7 / 2);",
+            "const ratio = 7 / 2;",
+            "const perItem = Math.trunc(10 / items.length);",
+            "setCount((count) => Math.trunc(count / 2))",
+            "return Math.trunc(total / 3);",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let unknown = source.replacingOccurrences(of: "func split(_ total: Int) -> Int { return total / 3 }",
+                                                  with: "func split(_ values: [Double]) -> Double { return values[0] / values[1] }")
+        XCTAssertThrowsError(try Transpiler().transpile(unknown)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: division with operands of unknown numeric type"), "\(error)")
+        }
+    }
 }

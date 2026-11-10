@@ -194,6 +194,18 @@ public class FileLowerer {
         }.filter { $0 != "body" })
         // Function-typed props (`let onTap: () -> Void`) are callable too.
         context.viewMethods.formUnion((context.viewProps[name] ?? []).filter { $0.type == "() => void" }.map(\.name))
+        // Swift types of state and props, for operations whose JS meaning depends on type
+        context.swiftTypes = [:]
+        for member in structDecl.memberBlock.members {
+            guard let varDecl = member.decl.as(VariableDeclSyntax.self), let binding = varDecl.bindings.first,
+                  let memberName = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else { continue }
+            if let annotation = binding.typeAnnotation?.type.as(IdentifierTypeSyntax.self)?.name.text {
+                context.swiftTypes[memberName] = annotation
+            } else if let initial = binding.initializer?.value {
+                if initial.is(IntegerLiteralExprSyntax.self) { context.swiftTypes[memberName] = "Int" }
+                if initial.is(FloatLiteralExprSyntax.self) { context.swiftTypes[memberName] = "Double" }
+            }
+        }
         
         for member in structDecl.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self), funcDecl.name.text != "body" {
@@ -378,6 +390,14 @@ public class FileLowerer {
             }
             parameters.append(IRClosureParameter(name: name, type: type))
         }
+        // Parameter types are known inside the body
+        let outer = context.swiftTypes
+        for param in signature.parameterClause.parameters {
+            if let type = param.type.as(IdentifierTypeSyntax.self)?.name.text {
+                context.swiftTypes[(param.secondName ?? param.firstName).text] = type
+            }
+        }
+        defer { context.swiftTypes = outer }
         let statements = body.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
         return .functionDeclaration(name: funcDecl.name.text, parameters: parameters, body: statements)
     }

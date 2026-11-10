@@ -19,6 +19,10 @@ public class LoweringContext {
     /// Props (stored properties set by the caller) of each View struct in the file, in order
     public var viewProps: [String: [IRClosureParameter]] = [:]
 
+    /// Declared Swift types of the current View's state, props and method parameters, by name.
+    /// Used where JS semantics differ by type (Int division).
+    public var swiftTypes: [String: String] = [:]
+
     /// The View emitted as the file's default export (the Next.js page), if any
     public var routeView: String?
 

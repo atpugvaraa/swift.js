@@ -285,12 +285,19 @@ public class ExpressionLowerer {
             
             // Check if it's an augmented assignment
             if let augOp = IRAugmentedAssignmentOperator.from(opText) {
+                if augOp == .divideAssign {
+                    // x /= y -> x = x / y with Swift's Int semantics
+                    return .assignment(target: lhs, value: lowerDivision(lhs, rhs, infix.leftOperand, infix.rightOperand, at: infix))
+                }
                 return .augmentedAssignment(target: lhs, op: augOp, value: rhs)
             }
             
             // Regular binary operator
             guard let op = IRBinaryOperator.from(opText) else {
                 return unsupported("operator \(opText)", at: infix)
+            }
+            if op == .divide {
+                return lowerDivision(lhs, rhs, infix.leftOperand, infix.rightOperand, at: infix)
             }
             return .binary(lhs: lhs, op: op, rhs: rhs)
         }
@@ -392,6 +399,49 @@ public class ExpressionLowerer {
     
     // MARK: - Closure Lowering
     
+    // MARK: - Numeric types
+
+    private enum NumberKind { case intLiteral, int, double, unknown }
+
+    /// Int / Int truncates in Swift; JS `/` doesn't. Swift requires both operands to have the
+    /// same type, so one known side decides; integer literals alone default to Int.
+    private func lowerDivision(_ lhs: IRExpression, _ rhs: IRExpression, _ lhsSyntax: ExprSyntax,
+                               _ rhsSyntax: ExprSyntax, at node: some SyntaxProtocol) -> IRExpression {
+        let kinds = [numberKind(lhsSyntax), numberKind(rhsSyntax)]
+        let division = IRExpression.binary(lhs: lhs, op: .divide, rhs: rhs)
+        if kinds.contains(.double) { return division }
+        if kinds.contains(.int) || kinds.allSatisfy({ $0 == .intLiteral }) {
+            return .functionCall(callee: .identifier("Math.trunc"), arguments: [IRArgument(value: division)])
+        }
+        return unsupported("division with operands of unknown numeric type", at: node)
+    }
+
+    private func numberKind(_ expr: ExprSyntax) -> NumberKind {
+        if expr.is(IntegerLiteralExprSyntax.self) { return .intLiteral }
+        if expr.is(FloatLiteralExprSyntax.self) { return .double }
+        if let tuple = expr.as(TupleExprSyntax.self), tuple.elements.count == 1, let inner = tuple.elements.first {
+            return numberKind(inner.expression)
+        }
+        if let ref = expr.as(DeclReferenceExprSyntax.self) {
+            switch context.swiftTypes[ref.baseName.text] {
+            case "Int"?: return .int
+            case "Double"?, "Float"?, "CGFloat"?: return .double
+            default: return .unknown
+            }
+        }
+        if let member = expr.as(MemberAccessExprSyntax.self), member.declName.baseName.text == "count" {
+            return .int
+        }
+        if let infix = expr.as(InfixOperatorExprSyntax.self),
+           ["+", "-", "*", "/", "%"].contains(infix.operator.as(BinaryOperatorExprSyntax.self)?.operator.text ?? "") {
+            let kinds = [numberKind(infix.leftOperand), numberKind(infix.rightOperand)]
+            if kinds.contains(.double) { return .double }
+            if kinds.contains(.int) { return .int }
+            return kinds.allSatisfy { $0 == .intLiteral } ? .intLiteral : .unknown
+        }
+        return .unknown
+    }
+
     /// Swift standard library calls with a JS equivalent of the same meaning, or nil.
     private func lowerLibraryCall(_ call: FunctionCallExprSyntax) -> IRExpression? {
         // Match on syntax first; arguments are lowered only for a match, so a fallback
