@@ -195,7 +195,7 @@ public class ViewLowerer {
             context.addDiagnostic("not yet supported: ForEach item with several views", at: closure)
             return nil
         }
-        return IRForEachViewNode(data: data, parameter: parameter, content: content)
+        return IRForEachViewNode(data: data, parameter: parameter, content: content, key: key)
     }
 
     private func forEachParameter(_ closure: ClosureExprSyntax) -> String? {

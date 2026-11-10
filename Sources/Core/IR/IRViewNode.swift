@@ -64,11 +64,14 @@ public final class IRForEachViewNode: IRViewNode {
     public var data: IRExpression
     public let parameter: String
     public let content: IRViewNode
+    /// React key for each item (also set on the item's elements)
+    public let key: IRExpression
 
-    public init(data: IRExpression, parameter: String, content: IRViewNode) {
+    public init(data: IRExpression, parameter: String, content: IRViewNode, key: IRExpression) {
         self.data = data
         self.parameter = parameter
         self.content = content
+        self.key = key
         super.init(componentName: "")
     }
 }

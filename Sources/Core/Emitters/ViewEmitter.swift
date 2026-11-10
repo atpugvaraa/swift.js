@@ -116,8 +116,16 @@ public final class ViewEmitter {
         let rowStyle = #"style={{ padding: "11px 16px", borderBottom: "0.5px solid var(--sw-color-separator)" }}"#
         if let forEach = view as? IRForEachViewNode {
             let data = exprEngine.emit(forEach.data, context: IRExpressionContext(precedence: 18))
-            let key = forEach.content.properties.first { $0.name == "key" }.map { exprEngine.emit($0.value) } ?? "undefined"
-            return "{\(data).map((\(forEach.parameter)) => (<div key={\(key)} \(rowStyle)>\n\(emit(forEach.content))\n</div>))}"
+            let key = exprEngine.emit(forEach.key)
+            let row = { (content: IRViewNode) in "<div key={\(key)} \(rowStyle)>\n\(self.emit(content))\n</div>" }
+            // An item that is an `if` renders no row at all when hidden, like SwiftUI
+            if let conditional = forEach.content as? IRConditionalViewNode {
+                let condition = exprEngine.emit(conditional.condition, context: IRExpressionContext(precedence: 3))
+                let thenRow = conditional.thenViews.first.map(row) ?? "null"
+                let elseRow = conditional.elseViews?.first.map(row) ?? "null"
+                return "{\(data).map((\(forEach.parameter)) => \(condition) ? \(thenRow) : \(elseRow))}"
+            }
+            return "{\(data).map((\(forEach.parameter)) => (\(row(forEach.content))))}"
         }
         if let conditional = view as? IRConditionalViewNode {
             let rows = { (views: [IRViewNode]) in "<>\n\(views.map(self.emitRow).joined(separator: "\n"))\n</>" }

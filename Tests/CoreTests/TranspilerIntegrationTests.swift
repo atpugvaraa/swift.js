@@ -758,6 +758,11 @@ final class TranspilerIntegrationTests: XCTestCase {
                             ForEach(items, id: \\.self) { item in
                                 Text(item)
                             }
+                            ForEach(items, id: \\.self) { item in
+                                if item.isEmpty {
+                                    Text(item)
+                                }
+                            }
                         }
                         .navigationTitle("Items")
                     }
@@ -777,6 +782,8 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
         XCTAssertFalse(output.contains("<List navigationTitle"), output)
+        XCTAssertFalse(output.contains("key={undefined}"), output)
+        XCTAssertTrue(output.contains(#"{items.map((item) => item.length === 0 ? <div key={item} style={{"#), output)
     }
 
     func testSFSymbolsBecomeLucideIcons() throws {
