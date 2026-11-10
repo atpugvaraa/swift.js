@@ -927,4 +927,26 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         XCTAssertTrue(output.contains("return n * 2;"), output)
     }
+
+    func testViewLetConstantsBecomeConsts() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                let title = "Todos"
+                let step: Int = 5
+                @State private var count = 0
+
+                var body: some View {
+                    Button("\\(title) +\\(step)") { count += step }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        XCTAssertTrue(output.contains(#"const title = "Todos";"#), output)
+        XCTAssertTrue(output.contains("const step = 5;"), output)
+        XCTAssertTrue(output.contains("setCount((count) => count + step)"), output)
+    }
 }

@@ -216,6 +216,14 @@ public class FileLowerer {
                 declarations.append(computed)
                 continue
             }
+            // `let title = "Todos"`: not a memberwise-init parameter, so a constant
+            if let varDecl = member.decl.as(VariableDeclSyntax.self), varDecl.attributes.isEmpty,
+               varDecl.bindingSpecifier.tokenKind == .keyword(.let), varDecl.bindings.count == 1,
+               let binding = varDecl.bindings.first, let initial = binding.initializer?.value,
+               let constant = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text {
+                declarations.append(.variableDeclaration(name: constant, isLet: true, value: exprLowerer.lower(initial)))
+                continue
+            }
             if let prop = Self.storedProp(member.decl) {
                 if context.typeScriptType(prop.type) == nil {
                     context.addDiagnostic("not yet supported: property \(prop.name): \(prop.type.trimmedDescription) in View \(name)", at: member)
