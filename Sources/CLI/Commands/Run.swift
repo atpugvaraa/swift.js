@@ -65,6 +65,11 @@ struct Run: ParsableCommand {
                         of: "App/",
                         with: "app/"
                     )
+                    // Next's App Router only treats lowercase page.tsx as a route; on case-sensitive
+                    // file systems Page.tsx would be an ordinary module next to the starter page.
+                    if fileURL.lastPathComponent == "Page.swift" {
+                        targetPath = String(targetPath.dropLast("Page.tsx".count)) + "page.tsx"
+                    }
                     let destURL = runtimeSrc.appendingPathComponent(targetPath)
 
                     // Ensure directory exists
@@ -96,6 +101,10 @@ struct Run: ParsableCommand {
         // 5. Prettier & ESLint
         print("Formatting code...")
         try shell("cd \(quoted(runtimeDir.path)) && bun x prettier --write src/")
+
+        // `next dev` never type-checks, so check the generated TSX before serving it.
+        print("Type-checking generated TSX...")
+        try shell("cd \(quoted(runtimeDir.path)) && bun x tsc --noEmit -p .")
 
         // 6. Run Bun
         print("Starting Server...")
