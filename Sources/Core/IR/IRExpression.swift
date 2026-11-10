@@ -20,6 +20,8 @@ public indirect enum IRExpression {
     // MARK: - Collections
     case array([IRExpression])
     case dictionary([(String, IRExpression)])
+    /// `{ ...base, key: value }`
+    case objectSpread(base: IRExpression, overrides: [(String, IRExpression)])
     case tuple([IRExpression])
     
     // MARK: - Operations

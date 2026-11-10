@@ -70,6 +70,10 @@ public class ExpressionEmissionEngine {
             let emitted = pairs.map { "\"\($0.0)\": \(emit($0.1, context: context.with(precedence: 0)))" }.joined(separator: ", ")
             return "{ \(emitted) }"
             
+        case .objectSpread(let base, let overrides):
+            let fields = overrides.map { "\($0.0): \(emit($0.1, context: context.with(precedence: 0)))" }
+            return "{ ...\(emit(base, context: context.with(precedence: 0))), \(fields.joined(separator: ", ")) }"
+
         case .tuple(let elements):
             // Swift tuples can be mapped to arrays or objects; default to array-like
             let emitted = elements.map { emit($0, context: context.with(precedence: 0)) }.joined(separator: ", ")

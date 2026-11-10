@@ -105,7 +105,7 @@ public class ExpressionLowerer {
             }
             
             // Binding / Projected value detection ($name)
-            if name.hasPrefix("$") {
+            if name.hasPrefix("$"), !name.dropFirst().allSatisfy(\.isNumber) {  // $0 is a closure parameter
                 let baseName = String(name.dropFirst())
                 let kind: IRBindingKind = inferBindingKind(baseName)
                 // Emitted as a one-way value today; two-way bindings need value + onChange.
@@ -152,13 +152,21 @@ public class ExpressionLowerer {
             // 2. Calls to the View's own methods are emitted as-is. Other calls (methods,
             //    initializers, functions) have no JS mapping yet, e.g. `isOn.toggle()` or `UUID()`.
             let calleeName = funcCall.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text
-            if calleeName.map({ !context.viewMethods.contains($0) }) ?? true {
+            let isViewMethod = calleeName.map { context.viewMethods.contains($0) } ?? false
+            // Mutating methods on @State values are rewritten into setter calls by StateLoweringPass.
+            let isStateMutation = funcCall.calledExpression.as(MemberAccessExprSyntax.self).map {
+                Self.mutatingMethods.contains($0.declName.baseName.text) && $0.base.map(isStateRooted) == true
+            } ?? false
+            if !isViewMethod && !isStateMutation {
                 context.addDiagnostic(
                     "not yet supported: call to \(funcCall.calledExpression.trimmedDescription)()", at: funcCall)
             }
             let callee = lower(funcCall.calledExpression)
-            let arguments = funcCall.arguments.map { arg -> IRArgument in
+            var arguments = funcCall.arguments.map { arg -> IRArgument in
                 IRArgument(label: arg.label?.text, value: lower(arg.expression))
+            }
+            if let trailing = funcCall.trailingClosure {
+                arguments.append(IRArgument(value: lower(ExprSyntax(trailing))))
             }
             return .functionCall(callee: callee, arguments: arguments)
         }
@@ -360,6 +368,23 @@ public class ExpressionLowerer {
     
     // MARK: - Closure Lowering
     
+    /// Swift mutating methods StateLoweringPass knows how to rewrite on @State values.
+    static let mutatingMethods: Set<String> = ["toggle", "append", "insert", "remove", "removeAll"]
+
+    /// `todos`, `todos[i].done` … whose root is a @State variable.
+    private func isStateRooted(_ expr: ExprSyntax) -> Bool {
+        if let ref = expr.as(DeclReferenceExprSyntax.self) {
+            return context.lookupVariable(ref.baseName.text)?.kind == .stateVariable
+        }
+        if let member = expr.as(MemberAccessExprSyntax.self), let base = member.base {
+            return isStateRooted(base)
+        }
+        if let sub = expr.as(SubscriptCallExprSyntax.self) {
+            return isStateRooted(sub.calledExpression)
+        }
+        return false
+    }
+
     /// Records valid Swift that cannot be translated yet and returns a placeholder that is never emitted.
     private func unsupported(_ what: String, at node: some SyntaxProtocol) -> IRExpression {
         context.addDiagnostic("not yet supported: \(what)", at: node)

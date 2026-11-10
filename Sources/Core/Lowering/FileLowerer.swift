@@ -100,6 +100,9 @@ public class FileLowerer {
         } catch {
             context.addDiagnostic("Pass execution failed: \(error)")
         }
+        for message in passContext.diagnostics.messages where message.severity == .error {
+            context.addDiagnostic(message.message)
+        }
         
         return file
     }

@@ -12,7 +12,7 @@ export const Counter = () => {
 {`Count is ${count}`}
 </Text>
 <Button style={{ padding: 16 }} onClick={() => {
-    setCount(count + 1);
+    setCount((count) => count + 1);
 }}>
 {"Increment"}
 </Button>

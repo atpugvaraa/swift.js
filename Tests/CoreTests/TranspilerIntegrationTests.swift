@@ -310,7 +310,7 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         for expected in [
             "const add = (amount: number, label: string) => {",
-            "setCount(count + amount);",
+            "setCount((count) => count + amount);",
             "reset();",
             "setNote(label);",
             "const reset = () => {",
@@ -373,7 +373,7 @@ final class TranspilerIntegrationTests: XCTestCase {
         let output = try Transpiler().transpile(source)
 
         for expected in [
-            #"<Row title={"Taps"} count={taps} onTap={() => setTaps(taps + 1)} />"#,
+            #"<Row title={"Taps"} count={taps} onTap={() => setTaps((taps) => taps + 1)} />"#,
             "<Header />",
             "export const Row = ({ title, count, onTap }: { title: string; count: number; onTap: () => void }) => {",
             "onTap();",
@@ -523,12 +523,60 @@ final class TranspilerIntegrationTests: XCTestCase {
 
         for expected in [
             "onClick={() => {",
-            "setCount(count + 1);",
-            "setCount(count * 2);",
+            "setCount((count) => count + 1);",
+            "setCount((count) => count * 2);",
             "<Text>\n{\"Bump\"}\n</Text>",
             "onReset={() => setCount(0)}",
         ] {
             XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+    }
+
+    func testStateMutationsBecomeImmutableUpdates() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var isOn = false
+                @State private var names: [String] = []
+                @State private var flags: [Bool] = [false, true]
+                @State private var count = 0
+
+                var body: some View {
+                    VStack {
+                        Button("Go") { run() }
+                        Button("Clear") { names.removeAll { $0.isEmpty } }
+                    }
+                }
+
+                func run() {
+                    isOn.toggle()
+                    names.append("x")
+                    names.insert("first", at: 0)
+                    names.remove(at: 1)
+                    flags[1].toggle()
+                    count += 1
+                    count += 1
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "setIsOn((isOn) => !isOn);",
+            #"setNames((names) => names.concat(["x"]));"#,
+            #"setNames((names) => names.slice(0, 0).concat(["first"], names.slice(0)));"#,
+            "setNames((names) => names.filter((_item, _index) => _index !== 1));",
+            "setFlags((flags) => flags.map((_item, _index) => _index === 1 ? !_item : _item));",
+            "setCount((count) => count + 1);",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let stale = source.replacingOccurrences(of: "count += 1\n        count += 1", with: "count += 1\n        names.append(\"\\(count)\")")
+        XCTAssertThrowsError(try Transpiler().transpile(stale)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: reading count after changing it in the same action in Page"), "\(error)")
         }
     }
 }
