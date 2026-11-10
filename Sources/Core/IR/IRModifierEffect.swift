@@ -47,4 +47,7 @@ public enum IRModifierEffect {
     
     /// Legacy style property bridge
     case style(key: String, value: IRExpression)
+
+    /// A component prop, e.g. `.disabled(x)` -> `disabled={x}`
+    case attribute(name: String, value: IRExpression)
 }

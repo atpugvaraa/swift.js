@@ -11,6 +11,7 @@ public class ModifierLowerer {
     public static let supportedModifiers: Set<String> = [
         "padding", "font", "bold", "fontWeight", "foregroundColor", "foregroundStyle",
         "background", "opacity", "cornerRadius", "frame",
+        "strikethrough", "underline", "italic", "disabled", "onTapGesture",
     ]
 
     public init(context: LoweringContext, exprLowerer: ExpressionLowerer) {
@@ -30,6 +31,10 @@ public class ModifierLowerer {
             context.addDiagnostic("not yet supported: modifier .\(modifierName)", at: memberAccess.period)
             return modifier
         }
+        if let effects = behavior(modifierName, callExpr) {
+            modifier.effects = effects
+            return modifier
+        }
         guard callExpr.trailingClosure == nil, let styles = styles(modifierName, Array(callExpr.arguments)) else {
             let arguments = callExpr.arguments.trimmedDescription
             context.addDiagnostic("not yet supported: .\(modifierName)(\(arguments))", at: memberAccess.period)
@@ -38,6 +43,24 @@ public class ModifierLowerer {
 
         modifier.effects = styles.map { .style(key: $0.key, value: $0.value) }
         return modifier
+    }
+
+    /// Modifiers that become props or event handlers rather than CSS.
+    private func behavior(_ name: String, _ call: FunctionCallExprSyntax) -> [IRModifierEffect]? {
+        let args = Array(call.arguments)
+        switch name {
+        case "disabled" where args.count == 1 && args[0].label == nil && call.trailingClosure == nil:
+            return [.attribute(name: "disabled", value: exprLowerer.lower(args[0].expression))]
+        case "onTapGesture":
+            // .onTapGesture { … } / .onTapGesture(perform: { … }); a single tap only
+            let action = call.trailingClosure.map(ExprSyntax.init)
+                ?? args.first(where: { $0.label?.text == "perform" })?.expression
+            let onlyAction = args.allSatisfy { $0.label?.text == "perform" }
+            guard let action, onlyAction else { return nil }
+            return [.interaction(event: "onTap", handler: exprLowerer.lower(action))]
+        default:
+            return nil
+        }
     }
 
     /// CSS declarations for a supported modifier form, or nil when this form is not supported.
@@ -68,6 +91,18 @@ public class ModifierLowerer {
 
         case "background":
             if let css = only.flatMap(color) { return [("background", .stringLiteral(css))] }
+
+        case "strikethrough", "underline":
+            // .strikethrough() / .strikethrough(isDone)
+            let line = name == "strikethrough" ? "line-through" : "underline"
+            if args.isEmpty { return [("textDecoration", .stringLiteral(line))] }
+            if args.count == 1, args[0].label == nil {
+                return [("textDecoration", .ternary(condition: exprLowerer.lower(args[0].expression),
+                                                    thenExpr: .stringLiteral(line), elseExpr: .stringLiteral("none")))]
+            }
+
+        case "italic":
+            if args.isEmpty { return [("fontStyle", .stringLiteral("italic"))] }
 
         case "opacity":
             if let n = only.flatMap(number) { return [("opacity", .numberLiteral(n))] }

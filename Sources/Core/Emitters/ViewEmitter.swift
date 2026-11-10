@@ -25,6 +25,7 @@ public final class ViewEmitter {
         }
         var attributes: [String] = []
         var bodyParts: [String] = []
+        var wrapperHandlers: [String] = []  // tap handlers, on a layout-neutral wrapper
 
         // 1. Process Properties (e.g., content, label)
         for property in view.properties {
@@ -48,8 +49,9 @@ public final class ViewEmitter {
             for effect in modifier.effects {
                 switch effect {
                 case .interaction(let event, let handler):
-                    let reactEvent = mapEventToReact(event)
-                    attributes.append("\(reactEvent)={\(exprEngine.emit(handler))}")
+                    // swiftuijs views mostly don't take DOM event props, so attach the handler to a
+                    // `display: contents` wrapper: no box of its own, children's clicks bubble to it.
+                    wrapperHandlers.append("\(mapEventToReact(event))={\(exprEngine.emit(handler))}")
                 case .animation(let value):
                     attributes.append("animation={\(exprEngine.emit(value))}")
                 case .font(let value):
@@ -58,6 +60,8 @@ public final class ViewEmitter {
                     styles.append(.style(key: key, value: value))
                 case .spacing, .foregroundColor, .background, .opacity, .frame, .alignment, .offset:
                     styles.append(effect)
+                case .attribute(let name, let value):
+                    attributes.append("\(name)={\(exprEngine.emit(value))}")
                 case .custom(let name, let args):
                     let argStr = args.map { exprEngine.emit($0) }.joined(separator: ", ")
                     attributes.append("data-\(name)={\(argStr)}")
@@ -98,11 +102,13 @@ public final class ViewEmitter {
         
         let attrStr = attributes.isEmpty ? "" : " " + attributes.joined(separator: " ")
         
-        if bodyParts.isEmpty {
-            return "<\(tag)\(attrStr) />"
-        }
-        
-        return "<\(tag)\(attrStr)>\n\(bodyParts.joined(separator: "\n"))\n</\(tag)>"
+        let element = bodyParts.isEmpty
+            ? "<\(tag)\(attrStr) />"
+            : "<\(tag)\(attrStr)>\n\(bodyParts.joined(separator: "\n"))\n</\(tag)>"
+        guard !wrapperHandlers.isEmpty else { return element }
+        // A ForEach key must stay on the outermost element.
+        let key = view.properties.first { $0.name == "key" }.map { " key={\(exprEngine.emit($0.value))}" } ?? ""
+        return "<div\(key) style={{ display: \"contents\" }} \(wrapperHandlers.joined(separator: " "))>\n\(element)\n</div>"
     }
     
     /// `{cond ? <A /> : <B />}`, or `{cond && <A />}` without else; several views use a fragment.

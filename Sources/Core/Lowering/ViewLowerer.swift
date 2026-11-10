@@ -356,6 +356,10 @@ public class ViewLowerer {
                 }
                 styledKeys.formUnion(keys)
                 lastRank = max(lastRank, rank)
+                if modifier.name == "disabled", !["Button", "TextField", "SecureField", "Toggle"].contains(viewNode.componentName) {
+                    // swiftuijs controls take `disabled`; SwiftUI disabling a whole container has no single prop
+                    context.addDiagnostic("not yet supported: .disabled on \(viewNode.componentName.isEmpty ? "this view" : viewNode.componentName)", at: modifierCall)
+                }
                 viewNode.applyModifier(modifier)
             }
         }

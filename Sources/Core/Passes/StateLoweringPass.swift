@@ -45,6 +45,8 @@ public class StateLoweringPass: CompilerPass {
                     return .interaction(event: event, handler: lowerExpression(handler, stateVars))
                 case .style(let key, let value):
                     return .style(key: key, value: lowerExpression(value, stateVars))
+                case .attribute(let name, let value):
+                    return .attribute(name: name, value: lowerExpression(value, stateVars))
                 default:
                     return effect
                 }

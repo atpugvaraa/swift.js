@@ -44,7 +44,7 @@ final class TranspilerIntegrationTests: XCTestCase {
         }
     }
 
-    func testValidSwiftUIThatCannotBeTranslatedFailsInsteadOfBeingDropped() {
+    func testConstructsThatWereOnceDroppedNowTranslate() throws {
         let source = """
             import SwiftUI
 
@@ -70,13 +70,11 @@ final class TranspilerIntegrationTests: XCTestCase {
             }
             """
 
-        XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
-            let message = "\(error)"
-            for expected in [
-                "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
-            ] {
-                XCTAssertTrue(message.contains(expected), "missing \(expected) in:\n\(message)")
-            }
+        // Each of these used to be silently dropped; all of them translate now.
+        let output = try Transpiler().transpile(source, fileName: "Page.swift")
+        for expected in ["export type Todo", "const doubled = count * 2;", "{count > 0 && <Text>",
+                         "onClick={() => setCount((count) => count + 1)}>", "const reset = () => {"] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
 
@@ -708,5 +706,41 @@ final class TranspilerIntegrationTests: XCTestCase {
         let output = try Transpiler().transpile(source)
 
         XCTAssertTrue(output.contains(#"{`Status: ${done ? "read" : "unread"}`}"#), output)
+    }
+
+    func testBehaviorModifiers() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var done = false
+                @State private var name = ""
+
+                var body: some View {
+                    VStack {
+                        Text("Task").strikethrough(done).italic().onTapGesture { done.toggle() }
+                        Button("Save") { done = true }.disabled(name.isEmpty)
+                        Text("Plain").underline()
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            #"textDecoration: done ? "line-through" : "none""#,
+            #"fontStyle: "italic""#,
+            #"<div style={{ display: "contents" }} onClick={() => setDone((done) => !done)}>"#,
+            "disabled={name.length === 0}",
+            #"textDecoration: "underline""#,
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let container = source.replacingOccurrences(of: "Text(\"Plain\").underline()", with: "VStack { Text(\"x\") }.disabled(true)")
+        XCTAssertThrowsError(try Transpiler().transpile(container)) { error in
+            XCTAssertTrue("\(error)".contains("not yet supported: .disabled on VStack"), "\(error)")
+        }
     }
 }

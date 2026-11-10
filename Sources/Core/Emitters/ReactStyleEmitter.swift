@@ -44,7 +44,7 @@ public class ReactStyleEmitter {
             case .style(let key, let value):
                 styleProps[key] = exprEngine.emit(value)
                 
-            case .interaction, .animation, .custom:
+            case .interaction, .animation, .custom, .attribute:
                 // These are usually handled as separate props or wrapper components
                 break
             }
