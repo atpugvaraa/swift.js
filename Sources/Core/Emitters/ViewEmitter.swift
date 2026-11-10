@@ -16,6 +16,9 @@ public final class ViewEmitter {
     }
     
     public func emit(_ view: IRViewNode) -> String {
+        if let conditional = view as? IRConditionalViewNode {
+            return emitConditional(conditional)
+        }
         var attributes: [String] = []
         var bodyParts: [String] = []
 
@@ -98,6 +101,31 @@ public final class ViewEmitter {
         return "<\(tag)\(attrStr)>\n\(bodyParts.joined(separator: "\n"))\n</\(tag)>"
     }
     
+    /// `{cond ? <A /> : <B />}`, or `{cond && <A />}` without else; several views use a fragment.
+    private func emitConditional(_ node: IRConditionalViewNode) -> String {
+        let condition = exprEngine.emit(node.condition, context: IRExpressionContext(precedence: 3))
+        let thenJSX = jsx(node.thenViews)
+        guard let elseViews = node.elseViews else {
+            return "{\(condition) && \(thenJSX)}"
+        }
+        return "{\(condition) ? \(thenJSX) : \(jsx(elseViews))}"
+    }
+
+    private func jsx(_ views: [IRViewNode]) -> String {
+        switch views.count {
+        case 0: return "null"
+        case 1: return emitAsExpression(views[0])
+        default: return "<>\n\(views.map(emit).joined(separator: "\n"))\n</>"
+        }
+    }
+
+    /// A conditional nested directly in a branch must not add another pair of braces.
+    private func emitAsExpression(_ view: IRViewNode) -> String {
+        let emitted = emit(view)
+        if view is IRConditionalViewNode { return String(emitted.dropFirst().dropLast()) }
+        return emitted
+    }
+
     private static func isChildLabel(_ property: String, on component: String) -> Bool {
         (component == "Text" && property == "content") || (component == "Button" && property == "title")
     }

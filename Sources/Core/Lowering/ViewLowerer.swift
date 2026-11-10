@@ -91,24 +91,12 @@ public class ViewLowerer {
         var statements: [IRStatement] = []
 
         // Handle trailing closure
-        if let trailingClosure = callExpr.trailingClosure {
-            for item in trailingClosure.statements {
-                if let stmtLowerer = stmtLowerer {
-                    let irStmt = stmtLowerer.lowerCodeBlockItem(item)
-                    
-                    // If the statement is just a view expression, add it as a child
-                    if case .expression(let expr) = irStmt, 
-                       let childView = lowerIRExpressionToView(expr) {
-                        children.append(childView)
-                    } else if componentName == "Button" {
-                        statements.append(irStmt)  // Button's closure is its action
-                    } else {
-                        // A view builder closure only holds views; `if`, `let` etc. need dedicated lowering.
-                        let isIf = item.item.as(ExpressionStmtSyntax.self)?.expression.is(IfExprSyntax.self) ?? false
-                        let what = isIf ? "if" : "\(item.item.kind)"
-                        context.addDiagnostic("not yet supported: \(what) in \(componentName) content", at: item)
-                    }
-                }
+        if let trailingClosure = callExpr.trailingClosure, let stmtLowerer {
+            if componentName == "Button" {
+                // Button's closure is its action
+                statements = trailingClosure.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
+            } else {
+                children = lowerViewContent(trailingClosure.statements, in: componentName)
             }
         }
         
@@ -123,6 +111,36 @@ public class ViewLowerer {
             children: children,
             statements: statements
         )
+    }
+
+    /// The views in a view builder body (a container's closure or an `if` branch).
+    /// Supports view expressions and `if`/`else`; anything else is reported.
+    func lowerViewContent(_ items: CodeBlockItemListSyntax, in container: String) -> [IRViewNode] {
+        items.compactMap { item -> IRViewNode? in
+            let expr = item.item.as(ExprSyntax.self) ?? item.item.as(ExpressionStmtSyntax.self)?.expression
+            if let ifExpr = expr?.as(IfExprSyntax.self) {
+                return lowerViewIf(ifExpr, in: container)
+            }
+            if let expr, let view = lowerViewExpression(expr) {
+                return view
+            }
+            context.addDiagnostic("not yet supported: \(item.item.kind) in \(container) content", at: item)
+            return nil
+        }
+    }
+
+    /// `if cond { A } else if other { B } else { C }` -> nested conditional view nodes.
+    private func lowerViewIf(_ ifExpr: IfExprSyntax, in container: String) -> IRViewNode? {
+        guard let stmtLowerer else { return nil }
+        let condition = stmtLowerer.lowerConditionList(ifExpr.conditions)
+        let thenViews = lowerViewContent(ifExpr.body.statements, in: container)
+        var elseViews: [IRViewNode]?
+        if let elseIf = ifExpr.elseBody?.as(IfExprSyntax.self) {
+            elseViews = lowerViewIf(elseIf, in: container).map { [$0] }
+        } else if let elseBlock = ifExpr.elseBody?.as(CodeBlockSyntax.self) {
+            elseViews = lowerViewContent(elseBlock.statements, in: container)
+        }
+        return IRConditionalViewNode(condition: condition, thenViews: thenViews, elseViews: elseViews)
     }
 
     /// `Row(title: "x") { action() }` for a View declared in this file. Labels must name its

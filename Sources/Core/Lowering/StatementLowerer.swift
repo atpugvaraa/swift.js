@@ -226,7 +226,7 @@ public class StatementLowerer {
     // MARK: - Helpers
     
     /// Lower a condition list (e.g., from if/guard/while)
-    private func lowerConditionList(_ conditions: ConditionElementListSyntax) -> IRExpression {
+    func lowerConditionList(_ conditions: ConditionElementListSyntax) -> IRExpression {
         var expressions: [IRExpression] = []
         
         for condition in conditions {

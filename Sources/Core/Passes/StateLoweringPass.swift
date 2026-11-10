@@ -39,7 +39,13 @@ public class StateLoweringPass: CompilerPass {
             IRProperty(name: $0.name, value: lowerStateInExpression($0.value, stateVars: stateVars))
         }
 
-        // 4. Lower state in children
+        // 4. Lower state in conditional branches
+        if let conditional = node as? IRConditionalViewNode {
+            conditional.condition = lowerStateInExpression(conditional.condition, stateVars: stateVars)
+            (conditional.thenViews + (conditional.elseViews ?? [])).forEach { lowerStateInView($0, stateVars: stateVars) }
+        }
+
+        // 5. Lower state in children
         for child in node.children {
             lowerStateInView(child, stateVars: stateVars)
         }

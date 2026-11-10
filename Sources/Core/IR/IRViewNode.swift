@@ -44,3 +44,17 @@ public class IRViewNode: BaseIRNode {
         self.modifiers.append(contentsOf: modifiers)
     }
 }
+
+/// `if cond { … } else { … }` inside view content: renders one branch's views.
+public final class IRConditionalViewNode: IRViewNode {
+    public var condition: IRExpression
+    public let thenViews: [IRViewNode]
+    public let elseViews: [IRViewNode]?
+
+    public init(condition: IRExpression, thenViews: [IRViewNode], elseViews: [IRViewNode]?) {
+        self.condition = condition
+        self.thenViews = thenViews
+        self.elseViews = elseViews
+        super.init(componentName: "")
+    }
+}

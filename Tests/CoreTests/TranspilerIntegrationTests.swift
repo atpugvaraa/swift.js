@@ -74,7 +74,6 @@ final class TranspilerIntegrationTests: XCTestCase {
             let message = "\(error)"
             for expected in [
                 "Page.swift:3:1: error: not yet supported: top-level struct Todo",
-                "Page.swift:14:13: error: not yet supported: if in VStack content",
                 "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
             ] {
                 XCTAssertTrue(message.contains(expected), "missing \(expected) in:\n\(message)")
@@ -414,6 +413,43 @@ final class TranspilerIntegrationTests: XCTestCase {
         let range = source.replacingOccurrences(of: "var sum: Int { a + 2 * 3 }", with: "var r: ClosedRange<Int> { 0...a }")
         XCTAssertThrowsError(try Transpiler().transpile(range)) { error in
             XCTAssertTrue("\(error)".contains("not yet supported: operator ..."), "\(error)")
+        }
+    }
+
+    func testIfInViewContentBecomesConditionalJSX() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 0
+
+                var body: some View {
+                    VStack {
+                        if count > 0 {
+                            Text("Positive")
+                        }
+                        if count == 0 {
+                            Text("Zero")
+                        } else if count < 3 {
+                            Text("Few")
+                        } else {
+                            Text("Many")
+                            Text("Really")
+                        }
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "{count > 0 && <Text>",
+            "{count === 0 ? <Text>",
+            ": count < 3 ? <Text>",
+            ": <>\n<Text>",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
 }
