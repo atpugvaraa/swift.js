@@ -31,6 +31,10 @@ public indirect enum IRStatement {
     /// A View method, emitted as `const name = (params) => { body };`
     case functionDeclaration(name: String, parameters: [IRClosureParameter], body: [IRStatement])
 
+    // MARK: - Models
+    /// A model struct: a TypeScript type plus a memberwise-initializer function
+    case model(name: String, fields: [IRModelField])
+
     // MARK: - Return/Break/Continue
     case returnStatement(IRExpression?)
     case breakStatement
@@ -62,4 +66,14 @@ public class IRSwitchCase: BaseIRNode {
         self.body = body
         super.init(sourceLocation: sourceLocation)
     }
+}
+
+/// A stored property of a model struct.
+public struct IRModelField {
+    public let name: String
+    public let type: String
+    /// Value used when the initializer doesn't receive one
+    public let defaultValue: IRExpression?
+    /// Whether Swift's memberwise initializer takes it (`let` with a default value is excluded)
+    public let isParameter: Bool
 }

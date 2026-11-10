@@ -54,6 +54,27 @@ public final class StatementEmitter {
             context.outdent()
             return result + "\(context.linePrefix())};"
 
+        case .model(let name, let fields):
+            // export type Todo = { … }; export const Todo = (init: { … }): Todo => ({ defaults, ...init });
+            let type = fields.map { "\($0.name): \($0.type)" }.joined(separator: "; ")
+            let parameters = fields.filter(\.isParameter)
+            let initType = parameters.map { "\($0.name)\($0.defaultValue == nil ? "" : "?"): \($0.type)" }
+                .joined(separator: "; ")
+            let defaults = fields.compactMap { field in
+                field.defaultValue.map { "\(field.name): \(exprEngine.emit($0))" }
+            }
+            let initParameter: String
+            if parameters.isEmpty {
+                initParameter = ""
+            } else if parameters.allSatisfy({ $0.defaultValue != nil }) {
+                initParameter = "init: { \(initType) } = {}"
+            } else {
+                initParameter = "init: { \(initType) }"
+            }
+            let body = (defaults + (parameters.isEmpty ? [] : ["...init"])).joined(separator: ", ")
+            return "\(context.linePrefix())export type \(name) = { \(type) };\n"
+                + "\(context.linePrefix())export const \(name) = (\(initParameter)): \(name) => ({ \(body) });"
+
         case .breakStatement:
             return "\(context.linePrefix())break;"
             

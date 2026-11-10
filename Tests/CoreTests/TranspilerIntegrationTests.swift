@@ -73,7 +73,6 @@ final class TranspilerIntegrationTests: XCTestCase {
         XCTAssertThrowsError(try Transpiler().transpile(source, fileName: "Page.swift")) { error in
             let message = "\(error)"
             for expected in [
-                "Page.swift:3:1: error: not yet supported: top-level struct Todo",
                 "Page.swift:17:26: error: not yet supported: modifier .onTapGesture",
             ] {
                 XCTAssertTrue(message.contains(expected), "missing \(expected) in:\n\(message)")
@@ -624,6 +623,50 @@ final class TranspilerIntegrationTests: XCTestCase {
         let index = source.replacingOccurrences(of: "names.first(where:", with: "names.firstIndex(where:")
         XCTAssertThrowsError(try Transpiler().transpile(index)) { error in
             XCTAssertTrue("\(error)".contains("not yet supported: call to names.firstIndex()"), "\(error)")
+        }
+    }
+
+    func testModelStructsBecomeTypesWithMemberwiseInitializers() throws {
+        let source = """
+            import SwiftUI
+
+            struct Todo: Identifiable {
+                let id = UUID()
+                var title: String
+                var done = false
+                var note: String?
+            }
+
+            struct Page: View {
+                @State private var todos: [Todo] = []
+
+                var body: some View {
+                    VStack {
+                        ForEach(todos) { todo in
+                            Row(todo: todo)
+                        }
+                        Button("Add") { todos.append(Todo(title: "New", note: nil)) }
+                    }
+                }
+            }
+
+            struct Row: View {
+                let todo: Todo
+                var body: some View { Text(todo.title) }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "export type Todo = { id: string; title: string; done: boolean; note: string | null };",
+            "export const Todo = (init: { title: string; done?: boolean; note?: string | null }): Todo => ({ id: crypto.randomUUID(), done: false, note: null, ...init });",
+            "useState<Todo[]>([])",
+            #"setTodos((todos) => todos.concat([Todo({ "title": "New", "note": null })]));"#,
+            "{todos.map((todo) => <Row key={todo.id} todo={todo} />)}",
+            "({ todo }: { todo: Todo })",
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
     }
 

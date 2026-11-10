@@ -18,6 +18,34 @@ public class LoweringContext {
 
     /// Props (stored properties set by the caller) of each View struct in the file, in order
     public var viewProps: [String: [IRClosureParameter]] = [:]
+
+    /// Model structs in the file (non-View structs), usable as TypeScript types
+    public var modelTypes: Set<String> = []
+
+    /// Swift types with a direct TypeScript equivalent, or nil.
+    public func typeScriptType(_ type: TypeSyntax) -> String? {
+        if let identifier = type.as(IdentifierTypeSyntax.self), identifier.genericArgumentClause == nil {
+            switch identifier.name.text {
+            case "String", "Character", "UUID": return "string"
+            case "Int", "Double", "Float", "CGFloat": return "number"
+            case "Bool": return "boolean"
+            case let name where modelTypes.contains(name): return name
+            default: return nil
+            }
+        }
+        if let array = type.as(ArrayTypeSyntax.self) {
+            return typeScriptType(array.element).map { $0.contains(" ") ? "(\($0))[]" : "\($0)[]" }
+        }
+        if let optional = type.as(OptionalTypeSyntax.self) {
+            return typeScriptType(optional.wrappedType).map { "\($0) | null" }  // nil is emitted as null
+        }
+        if let function = type.as(FunctionTypeSyntax.self), function.parameters.isEmpty,
+           function.effectSpecifiers == nil,
+           function.returnClause.type.as(IdentifierTypeSyntax.self)?.name.text == "Void" {
+            return "() => void"
+        }
+        return nil
+    }
     
     /// The symbol table for tracking definitions across scopes
     public let symbolTable: SymbolTable

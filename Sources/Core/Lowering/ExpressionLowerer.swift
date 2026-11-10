@@ -410,6 +410,12 @@ public class ExpressionLowerer {
 
         // Free functions and initializers
         if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text {
+            // Model memberwise init: Todo(title: x) -> Todo({ title: x })
+            if context.modelTypes.contains(name), labels.allSatisfy({ $0 != nil }) {
+                let fields = zip(argumentSyntax, values).map { ($0.label!, $1.value) }
+                return .functionCall(callee: .identifier(name),
+                                     arguments: fields.isEmpty ? [] : [IRArgument(value: .dictionary(fields))])
+            }
             switch (name, labels) {
             case ("UUID", []):
                 return .functionCall(callee: .identifier("crypto.randomUUID"), arguments: [])
@@ -499,7 +505,7 @@ public class ExpressionLowerer {
                 for param in clause.parameters {
                     var type: String?
                     if let swiftType = param.type {
-                        type = FileLowerer.typeScriptType(swiftType)
+                        type = context.typeScriptType(swiftType)
                         if type == nil {
                             context.addDiagnostic("not yet supported: closure parameter \(param.trimmedDescription)", at: param)
                         }

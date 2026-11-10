@@ -39,6 +39,7 @@ public class FileLowerer {
         
         var imports: [IRImport] = []
         var components: [IRComponent] = []
+        var models: [IRStatement] = []
         
         // 2. Lowering Phase
         for statement in sourceFileSyntax.statements {
@@ -49,12 +50,19 @@ public class FileLowerer {
             }
         }
         
+        // Model structs (non-View) first: Views may use them as types.
+        context.modelTypes = Set(sourceFileSyntax.statements.compactMap { statement -> String? in
+            guard let structDecl = statement.item.as(StructDeclSyntax.self),
+                  !context.componentRegistry.isComponent(structDecl.name.text) else { return nil }
+            return structDecl.name.text
+        })
+
         // Props of every View in the file, so call sites can be checked before the View is lowered.
         for statement in sourceFileSyntax.statements {
             if let structDecl = statement.item.as(StructDeclSyntax.self),
                context.componentRegistry.isComponent(structDecl.name.text) {
                 context.viewProps[structDecl.name.text] = structDecl.memberBlock.members.compactMap { member in
-                    storedProp(member.decl).map { IRClosureParameter(name: $0.name, type: Self.typeScriptType($0.type)) }
+                    storedProp(member.decl).map { IRClosureParameter(name: $0.name, type: context.typeScriptType($0.type)) }
                 }
             }
         }
@@ -68,6 +76,9 @@ public class FileLowerer {
             } else if let structDecl = statement.item.as(StructDeclSyntax.self),
                       let component = lowerStructAsComponent(structDecl) {
                 components.append(component)
+            } else if let structDecl = statement.item.as(StructDeclSyntax.self),
+                      context.modelTypes.contains(structDecl.name.text) {
+                if let model = lowerModel(structDecl) { models.append(model) }
             } else {
                 // Only View structs (and component functions) are transpiled so far.
                 context.addDiagnostic("not yet supported: top-level \(declarationName(statement.item))", at: statement)
@@ -82,7 +93,7 @@ public class FileLowerer {
             }
         }
 
-        let file = IRFile(imports: imports, statements: [], components: components)
+        let file = IRFile(imports: imports, statements: models, components: components)
         
         // 3. Post-pass: IR Transformations
         let passContext = CompilerPassContext(
@@ -167,7 +178,7 @@ public class FileLowerer {
                 continue
             }
             if let prop = storedProp(member.decl) {
-                if Self.typeScriptType(prop.type) == nil {
+                if context.typeScriptType(prop.type) == nil {
                     context.addDiagnostic("not yet supported: property \(prop.name): \(prop.type.trimmedDescription) in View \(name)", at: member)
                 }
                 continue
@@ -188,7 +199,7 @@ public class FileLowerer {
                             initialValue: exprLowerer.lower(initial)
                         )
                         if let annotation = binding.typeAnnotation?.type {
-                            stateVar.typeScriptType = Self.typeScriptType(annotation)
+                            stateVar.typeScriptType = context.typeScriptType(annotation)
                             if stateVar.typeScriptType == nil {
                                 context.addDiagnostic(
                                     "not yet supported: @State type \(annotation.trimmedDescription)", at: annotation)
@@ -269,6 +280,50 @@ public class FileLowerer {
         return .variableDeclaration(name: name, isLet: true, value: exprLowerer.lower(expr))
     }
 
+    /// `struct Todo { let id = UUID(); var title: String; var done = false }` -> type + initializer.
+    private func lowerModel(_ structDecl: StructDeclSyntax) -> IRStatement? {
+        let name = structDecl.name.text
+        guard structDecl.genericParameterClause == nil else {
+            context.addDiagnostic("not yet supported: generic struct \(name)", at: structDecl)
+            return nil
+        }
+        var fields: [IRModelField] = []
+        for member in structDecl.memberBlock.members {
+            guard let varDecl = member.decl.as(VariableDeclSyntax.self), varDecl.bindings.count == 1,
+                  let binding = varDecl.bindings.first, binding.accessorBlock == nil,
+                  let fieldName = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
+                context.addDiagnostic("not yet supported: \(declarationName(member.decl)) in struct \(name)", at: member)
+                continue
+            }
+            let initial = binding.initializer?.value
+            let type = binding.typeAnnotation.flatMap { context.typeScriptType($0.type) }
+                ?? initial.flatMap(inferredType)
+            guard let type else {
+                context.addDiagnostic("not yet supported: property type of \(fieldName) in struct \(name)", at: binding)
+                continue
+            }
+            let isLet = varDecl.bindingSpecifier.tokenKind == .keyword(.let)
+            // `var x: T?` without a value implicitly defaults to nil (and is optional in the init)
+            let implicitNil = !isLet && initial == nil && binding.typeAnnotation?.type.is(OptionalTypeSyntax.self) == true
+            fields.append(IRModelField(
+                name: fieldName, type: type,
+                defaultValue: initial.map { exprLowerer.lower($0) } ?? (implicitNil ? .nilLiteral : nil),
+                isParameter: !(isLet && initial != nil)))
+        }
+        return .model(name: name, fields: fields)
+    }
+
+    /// TypeScript type of a literal default value (`""`, `0`, `false`, `UUID()`).
+    private func inferredType(_ expr: ExprSyntax) -> String? {
+        if expr.is(StringLiteralExprSyntax.self) { return "string" }
+        if expr.is(IntegerLiteralExprSyntax.self) || expr.is(FloatLiteralExprSyntax.self) { return "number" }
+        if expr.is(BooleanLiteralExprSyntax.self) { return "boolean" }
+        if expr.as(FunctionCallExprSyntax.self)?.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "UUID" {
+            return "string"
+        }
+        return nil
+    }
+
     /// `let name: T` / `var name: T` without initializer or wrapper: a value the caller passes in.
     private func storedProp(_ decl: DeclSyntax) -> (name: String, type: TypeSyntax)? {
         guard let varDecl = decl.as(VariableDeclSyntax.self), varDecl.attributes.isEmpty,
@@ -290,7 +345,7 @@ public class FileLowerer {
         var parameters: [IRClosureParameter] = []
         for param in signature.parameterClause.parameters {
             let name = (param.secondName ?? param.firstName).text
-            guard param.defaultValue == nil, param.ellipsis == nil, let type = Self.typeScriptType(param.type) else {
+            guard param.defaultValue == nil, param.ellipsis == nil, let type = context.typeScriptType(param.type) else {
                 context.addDiagnostic("not yet supported: parameter \(param.trimmedDescription)", at: param)
                 return nil
             }
@@ -298,27 +353,6 @@ public class FileLowerer {
         }
         let statements = body.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
         return .functionDeclaration(name: funcDecl.name.text, parameters: parameters, body: statements)
-    }
-
-    /// Swift parameter types with a direct TypeScript equivalent.
-    static func typeScriptType(_ type: TypeSyntax) -> String? {
-        if let identifier = type.as(IdentifierTypeSyntax.self), identifier.genericArgumentClause == nil {
-            switch identifier.name.text {
-            case "String", "Character": return "string"
-            case "Int", "Double", "Float", "CGFloat": return "number"
-            case "Bool": return "boolean"
-            default: return nil
-            }
-        }
-        if let array = type.as(ArrayTypeSyntax.self) {
-            return typeScriptType(array.element).map { "\($0)[]" }
-        }
-        if let function = type.as(FunctionTypeSyntax.self), function.parameters.isEmpty,
-           function.effectSpecifiers == nil,
-           function.returnClause.type.as(IdentifierTypeSyntax.self)?.name.text == "Void" {
-            return "() => void"
-        }
-        return nil
     }
 
     /// View members the lowerer handles: `var body` and `@State var x = initial`.
