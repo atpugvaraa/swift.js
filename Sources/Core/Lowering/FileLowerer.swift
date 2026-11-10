@@ -184,6 +184,13 @@ public class FileLowerer {
                             name: pattern.identifier.text,
                             initialValue: exprLowerer.lower(initial)
                         )
+                        if let annotation = binding.typeAnnotation?.type {
+                            stateVar.typeScriptType = Self.typeScriptType(annotation)
+                            if stateVar.typeScriptType == nil {
+                                context.addDiagnostic(
+                                    "not yet supported: @State type \(annotation.trimmedDescription)", at: annotation)
+                            }
+                        }
                         stateVariables.append(stateVar)
                         context.addStateVariable(stateVar)
                     }

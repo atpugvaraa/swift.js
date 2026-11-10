@@ -55,7 +55,7 @@ public final class FileEmitter {
         for stateVariable in component.stateVariables {
             let setterName = "set" + stateVariable.name.prefix(1).uppercased() + stateVariable.name.dropFirst()
             let initialValue = exprEngine.emit(stateVariable.initialValue)
-            result += "\(context.linePrefix())const [\(stateVariable.name), \(setterName)] = useState(\(initialValue));\n"
+            result += "\(context.linePrefix())const [\(stateVariable.name), \(setterName)] = useState\(stateVariable.typeScriptType.map { "<\($0)>" } ?? "")(\(initialValue));\n"
         }
         
         // Computed properties and methods

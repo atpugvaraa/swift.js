@@ -82,6 +82,8 @@ public class IRStateVariable: BaseIRNode {
     public let initialValue: IRExpression // Initial value
     public let type: String?              // Type annotation (optional)
     public let inferredType: IRType       // Semantically inferred type
+    /// TypeScript type from the Swift annotation (`[String]` -> `string[]`), emitted as useState<T>
+    public var typeScriptType: String?
     
     public init(
         name: String,
