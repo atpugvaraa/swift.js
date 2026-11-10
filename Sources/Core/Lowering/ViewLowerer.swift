@@ -31,6 +31,9 @@ public class ViewLowerer {
         if componentName == "ForEach" {
             return lowerForEach(callExpr)
         }
+        if componentName == "Image" {
+            return lowerImage(callExpr)
+        }
         // Validate runtime capabilities
         let isRuntimeView = context.componentRegistry.definition(for: componentName)?.kind == .runtimeView
         let isSupported = context.capabilityRegistry.supportsComponent(componentName)
@@ -279,6 +282,38 @@ public class ViewLowerer {
         let fullHeight = IRModifier(name: "frame", arguments: [])
         fullHeight.effects = [.style(key: "height", value: .stringLiteral("100dvh"))]
         return IRViewNode(componentName: "NavigationStack", modifiers: [fullHeight], children: [page])
+    }
+
+    /// Image(systemName: "star") -> <StarIcon /> from lucide-react, sized like the text around it.
+    /// A ternary of two symbol names becomes a conditional between two icons.
+    private func lowerImage(_ callExpr: FunctionCallExprSyntax) -> IRViewNode? {
+        guard callExpr.arguments.count == 1, let arg = callExpr.arguments.first,
+              arg.label?.text == "systemName", callExpr.trailingClosure == nil else {
+            context.addDiagnostic("not yet supported: Image form (only Image(systemName:))", at: callExpr)
+            return nil
+        }
+        func icon(_ expr: ExprSyntax) -> IRViewNode? {
+            guard let literal = expr.as(StringLiteralExprSyntax.self), literal.segments.count == 1,
+                  let name = literal.segments.first?.as(StringSegmentSyntax.self)?.content.text else {
+                context.addDiagnostic("not yet supported: non-literal SF Symbol name", at: expr)
+                return nil
+            }
+            guard let component = SFSymbols.lucideIcon(for: name) else {
+                context.addDiagnostic("not yet supported: SF Symbol \"\(name)\" (no icon mapping yet)", at: expr)
+                return nil
+            }
+            context.usedIcons.insert(component)
+            return IRViewNode(componentName: component, properties: [
+                IRProperty(name: "size", value: .stringLiteral("1em")),
+                IRProperty(name: "aria-hidden", value: .boolLiteral(true)),
+            ])
+        }
+        if let ternary = arg.expression.as(TernaryExprSyntax.self) {
+            guard let thenIcon = icon(ternary.thenExpression), let elseIcon = icon(ternary.elseExpression) else { return nil }
+            return IRConditionalViewNode(condition: exprLowerer.lower(ternary.condition),
+                                         thenViews: [thenIcon], elseViews: [elseIcon])
+        }
+        return icon(arg.expression)
     }
 
     /// The SwiftUI argument that takes a Binding, per component.

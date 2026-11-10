@@ -93,6 +93,9 @@ public class FileLowerer {
             }
         }
 
+        if !context.usedIcons.isEmpty {
+            imports.append(IRImport(items: context.usedIcons.sorted(), module: "lucide-react"))
+        }
         let file = IRFile(imports: imports, statements: models, components: components)
         
         // 3. Post-pass: IR Transformations

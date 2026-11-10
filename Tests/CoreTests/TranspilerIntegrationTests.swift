@@ -29,7 +29,7 @@ final class TranspilerIntegrationTests: XCTestCase {
                 var body: some View {
                     TabView {
                         Text("Hello").shadow(radius: 4)
-                        Image(systemName: "star")
+                        Image("photo")
                     }
                 }
             }
@@ -39,7 +39,7 @@ final class TranspilerIntegrationTests: XCTestCase {
             let message = "\(error)"
             XCTAssertTrue(message.contains("Page.swift:5:9: error: not yet supported: view TabView"), message)
             XCTAssertTrue(message.contains("Page.swift:6:26: error: not yet supported: modifier .shadow"), message)
-            XCTAssertTrue(message.contains("Page.swift:7:13: error: not yet supported: view Image"), message)
+            XCTAssertTrue(message.contains("Page.swift:7:13: error: not yet supported: Image form (only Image(systemName:))"), message)
             XCTAssertFalse(message.contains("argument"), "unsupported views report once:\n\(message)")
         }
     }
@@ -777,5 +777,36 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
         }
         XCTAssertFalse(output.contains("<List navigationTitle"), output)
+    }
+
+    func testSFSymbolsBecomeLucideIcons() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var done = false
+                var body: some View {
+                    HStack {
+                        Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                        Image(systemName: "trash").foregroundStyle(.red)
+                    }
+                }
+            }
+            """
+
+        let output = try Transpiler().transpile(source)
+
+        for expected in [
+            "import { CircleCheckIcon, CircleIcon, Trash2Icon } from 'lucide-react';",
+            #"{done ? <CircleCheckIcon size={"1em"} aria-hidden={true} /> : <CircleIcon size={"1em"} aria-hidden={true} />}"#,
+            #"<Trash2Icon size={"1em"} aria-hidden={true} style={{ color: "var(--sw-color-red)" }} />"#,
+        ] {
+            XCTAssertTrue(output.contains(expected), "missing \(expected) in:\n\(output)")
+        }
+
+        let unknown = source.replacingOccurrences(of: "\"trash\"", with: "\"atom\"")
+        XCTAssertThrowsError(try Transpiler().transpile(unknown)) { error in
+            XCTAssertTrue("\(error)".contains(#"not yet supported: SF Symbol "atom" (no icon mapping yet)"#), "\(error)")
+        }
     }
 }

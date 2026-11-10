@@ -130,6 +130,7 @@ public final class CapabilityRegistry {
             ("SecureField", ["placeholder", "text"]),
             ("Toggle", ["label", "isOn"]),
             ("List", []),
+            ("Image", ["systemName"]),
             ("NavigationStack", []),
         ]
         for (name, properties) in components {

@@ -19,6 +19,9 @@ public class LoweringContext {
     /// Props (stored properties set by the caller) of each View struct in the file, in order
     public var viewProps: [String: [IRClosureParameter]] = [:]
 
+    /// Lucide icon components used by Image(systemName:), imported from lucide-react
+    public var usedIcons: Set<String> = []
+
     /// Model structs in the file (non-View structs), usable as TypeScript types
     public var modelTypes: Set<String> = []
 
