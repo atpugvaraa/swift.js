@@ -910,4 +910,21 @@ final class TranspilerIntegrationTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("not yet supported: division with operands of unknown numeric type"), "\(error)")
         }
     }
+
+    func testSingleExpressionMethodsReturnImplicitly() throws {
+        let source = """
+            import SwiftUI
+
+            struct Page: View {
+                @State private var count = 1
+                var body: some View { Text("\\(doubled(count))") }
+                func doubled(_ n: Int) -> Int { n * 2 }
+                func log() { print(count) }
+            }
+            """
+
+        let output = try Transpiler().transpile(source.replacingOccurrences(of: "func log() { print(count) }", with: ""))
+
+        XCTAssertTrue(output.contains("return n * 2;"), output)
+    }
 }

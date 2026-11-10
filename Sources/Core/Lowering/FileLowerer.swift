@@ -398,7 +398,11 @@ public class FileLowerer {
             }
         }
         defer { context.swiftTypes = outer }
-        let statements = body.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
+        var statements = body.statements.map { stmtLowerer.lowerCodeBlockItem($0) }
+        // `func f() -> Int { a + b }`: a single expression is implicitly returned
+        if signature.returnClause != nil, statements.count == 1, case .expression(let value) = statements[0] {
+            statements = [.returnStatement(value)]
+        }
         return .functionDeclaration(name: funcDecl.name.text, parameters: parameters, body: statements)
     }
 
